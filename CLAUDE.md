@@ -12,7 +12,7 @@ The goal is to be the best app for moving large files between phones and between
 
 The Windows app is a separate repo, `KhanLabs/khanlabs-lanshare`. The two apps must always be able to talk to each other.
 
-Current state: **planning only, no code yet.** The first coding work is Phase 2 in `PROGRESS.md`.
+Current state: **the first phone build is being tested.** It speaks protocol v1 as sender and receiver. See `PROGRESS.md`.
 
 ## Ground rules
 
@@ -43,21 +43,21 @@ Current state: **planning only, no code yet.** The first coding work is Phase 2 
   - one universal APK for phones and TV;
   - no native code (`.so` files), so it runs on 32-bit TV boxes too;
   - signed with both v1 (JAR) and v2 schemes.
-- **Server:** a small HTTP/1.1 server written for this app on `SSLServerSocket`, with coroutines and a bounded pool. Not NanoHTTPD, not Ktor.
-- **Client:** OkHttp with a custom `X509TrustManager` that accepts exactly one certificate (SHA-256 of the DER = device ID), and keep-alive pooling. Do not use OkHttp's `CertificatePinner`.
-- **Certificate:** ECDSA P-256, self-signed, made with BouncyCastle (`bcpkix`) and kept in app-private storage.
+- **Server:** a small HTTP/1.1 server written for this app (`core-net/HttpsServer.kt`): a plain `ServerSocket`, TLS added per connection so plain HTTP can get a 301, one thread per connection, capped by the 64-connection limit. Not NanoHTTPD, not Ktor.
+- **Client:** OkHttp with a custom `X509TrustManager` that accepts exactly one certificate (SHA-256 of the DER = device ID). Do not use OkHttp's `CertificatePinner`. Protocol v1 sends `Connection: close` (a new connection and pin check per request); v2 will use keep-alive pooling. OkHttp's `handshake.peerCertificates` is empty for self-signed certificates, so the peer ID is read from the TLS socket (`Clients.PEER_ID`).
+- **Certificate:** ECDSA P-256, self-signed, made with BouncyCastle (`bcpkix`) and kept in `noBackupFilesDir/identity` as PKCS#8 and DER files.
 - **Data:** Room for the resume journal, history and trusted devices. kotlinx.serialization for JSON.
 
-## Planned modules
+## Modules
 
 | Module | Contents |
 |---|---|
 | `core-protocol` | Pure Kotlin/JVM, no Android imports. Models, name rules, chunk math, digests, batch format, v1 and v2 state machines. Runs in CI against the Python app. |
-| `core-net` | HTTP server and client, TLS identity, pinning, device proof |
+| `core-net` | Pure Kotlin/JVM. HTTP server and client, TLS identity, pinning, v1 receiver and sender; device proof later |
 | `core-link` | NSD discovery, Wi-Fi Direct, LocalOnlyHotspot, QR payloads, binding sockets to a `Network` |
 | `core-store` | MediaStore, SAF and file writers; resume journal; trusted devices |
 | `transfer` | Scheduler, jobs and foreground service, notifications |
-| `ui-mobile`, `ui-tv` | Phone and TV screens |
+| `ui-mobile`, `ui-tv` | Phone and TV screens (`ui-tv` is not started) |
 | `app` | The single APK; picks phone or TV UI at runtime with `UiModeManager` |
 
 ## Android rules to follow
@@ -102,14 +102,27 @@ Current state: **planning only, no code yet.** The first coding work is Phase 2 
 - **Other files:** "All files access" may need adb on some TVs. Document it rather than hiding it.
 - **Received files:** install APKs through the PackageInstaller session API. Open videos with `ACTION_VIEW` (VLC, Kodi).
 
-## Build, test, release (once code exists)
+## Build, test, release
+
+Needs JDK 17 (`JAVA_HOME`) and the Android SDK with platform 37 (`local.properties` has `sdk.dir`; it is not committed).
 
 ```
-gradlew assembleDebug          # debug APK
-gradlew test                   # JVM unit tests (core-protocol runs without a device)
-gradlew connectedCheck         # instrumented tests on a device or emulator
-gradlew assembleRelease        # signed universal APK (needs the release keystore)
+gradlew assembleDebug                         # debug APK (app id dev.khanlabs.lanshare.debug)
+gradlew :core-protocol:test :core-net:test    # JVM tests, no device needed
+gradlew connectedCheck                        # instrumented tests on a device or emulator
+gradlew assembleRelease                       # signed universal APK (needs the release keystore)
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Against the Windows repo (both on 127.0.0.1, test code only, never in the app):
+
+```
+gradlew :core-net:conformanceTarget           # Kotlin receiver in conformance mode on 47890; prints its ID
+python -m pytest conformance --target 127.0.0.1:47890 --id <ID> [--slow]     # run in the Windows repo
+gradlew :core-net:sendTo -Pto=<host:port> -Pid=<ID or -> -Pfiles="a.txt;folder" -Ptext=hi
+```
+
+On a phone, a debug build has a "Conformance mode" switch, so the suite can run against it with `--target <phone IP>:47820`.
 
 **Release steps**
 1. Bump `versionCode` and `versionName`.

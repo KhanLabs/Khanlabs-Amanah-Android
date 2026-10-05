@@ -5,38 +5,38 @@ The plan these phases come from is `docs/PLAN.md` (section D).
 
 ## Where things stand (2026-10-05)
 
-- **State:** planning only. No Android project and no code yet.
-- **Windows app:** 1.2.0 is released. It speaks protocol v1 (`docs/PROTOCOL.md`).
-- **Before coding:** the Windows side does Phase 0 first. That is the 1.2.1 fixes, plus the v2 spec with test vectors and the conformance runner.
-- **When the phone work can start:** Phase 2 can start once the v2 spec is written, about halfway through the Windows Phase 1.
+- **State:** the first phone build (0.1.0, debug) is done. It speaks protocol v1 as sender and receiver, so it works with Windows 1.2.x. It has not been tested on a real phone yet.
+- **Windows app:** 1.2.1 has the Phase 0 fixes. The v2 spec, test vectors and conformance runner are written.
+- **Tested on the PC:** the Kotlin receiver passes the Windows repo's conformance suite (36 fast and 2 slow cases). Files and folders go both ways between the Kotlin code and the Windows 1.2.1 code, and the hashes match.
+- **Next:** install on a OnePlus 8T and test against Windows 1.2.1: MediaStore saving, NSD, the foreground service, notifications and the screens.
 
 ## Phase 2: phone app
 
 Setup:
-- [ ] Gradle project with the modules from `CLAUDE.md` (`core-protocol`, `core-net`, `core-link`, `core-store`, `transfer`, `ui-mobile`, `ui-tv`, `app`)
+- [x] Gradle project with the modules from `CLAUDE.md` (all except `ui-tv`)
 - [ ] `minSdk 23`, one universal APK, no native code, v1 and v2 signing
 - [ ] CI on GitHub Actions: build, unit tests, and `core-protocol` against the Python app
 
 Protocol and identity:
-- [ ] `core-protocol`: models, name rules, chunk math, tree digest, batch format, device proof and pairing MAC, passing every case in `docs/v2/vectors.json`
-- [ ] Device certificate (ECDSA P-256, BouncyCastle), device ID, excluded from backup
-- [ ] HTTP/1.1 server on `SSLServerSocket` with idle timeouts and connection limits
-- [ ] OkHttp client with a single-certificate trust manager
-- [ ] Protocol v1, sender and receiver, working with Windows 1.2.x
+- [x] `core-protocol`: models, name rules, chunk math, tree digest, batch format, device proof and pairing MAC, passing every case in `docs/v2/vectors.json`
+- [x] Device certificate (ECDSA P-256, BouncyCastle), device ID, excluded from backup
+- [x] HTTP/1.1 server with TLS, idle timeouts and connection limits
+- [x] OkHttp client with a single-certificate trust manager
+- [x] Protocol v1, sender and receiver, working with Windows 1.2.x (tested on the PC, not yet on a phone)
 - [ ] Protocol v2, sender and receiver: sessions, chunks, batches, parallel connections, resume journal, device proof
 
 Finding devices:
-- [ ] NSD announce and browse
-- [ ] Add a device by IP
+- [x] NSD announce and browse (not yet tested on a phone)
+- [x] Add a device by IP
 - [ ] QR scan (CameraX and ZXing) to connect and pair
 - [ ] Trusted devices list
 
 Sending and receiving:
-- [ ] Share sheet (`ACTION_SEND`, `ACTION_SEND_MULTIPLE`), file and photo pickers
-- [ ] Save through MediaStore (`Download/KhanLabs`) with `IS_PENDING`, or to a SAF folder the user picks
-- [ ] Accept and Decline from a notification
-- [ ] User-initiated jobs (API 34+) or a foreground service; wake lock and `WifiLock`
-- [ ] Progress with speed and time remaining; history; text messages
+- [x] Share sheet (`ACTION_SEND`, `ACTION_SEND_MULTIPLE`), file and photo pickers
+- [ ] Save through MediaStore (`Download/KhanLabs`) with `IS_PENDING` (done), or to a SAF folder the user picks (not started)
+- [x] Accept and Decline from a notification
+- [ ] User-initiated jobs (API 34+) or a foreground service; wake lock and `WifiLock` (foreground service and locks done; user-initiated jobs not started)
+- [ ] Progress with speed and time remaining; history; text messages (all but history done)
 
 Nice to have:
 - [ ] Clipboard push to trusted devices
@@ -115,6 +115,16 @@ Done when:
 | 2026-10-05 | Own server on `SSLServerSocket`, OkHttp client | NanoHTTPD is unmaintained; Ktor needs Netty for TLS |
 | 2026-10-05 | QR code is the main way to pair and to start Wi-Fi Direct | P2P service discovery is unreliable on many devices |
 | 2026-10-05 | Don't base the protocol on LocalSend's | No resume or proven identity, and we don't control it; an optional adapter may come later |
+| 2026-10-05 | `compileSdk 37`, `targetSdk 36` | The Compose BOM 2026.09.00 needs compile SDK 37; the target stays at 36 until it has been tested |
+| 2026-10-05 | One thread per connection, capped at 64, instead of coroutines in the server | Blocking socket code is simpler to read, and the connection cap already bounds the threads |
+| 2026-10-05 | Plain `ServerSocket` with TLS added per connection | Lets a plain HTTP request get a 301 to `https://`, like the Windows app |
+| 2026-10-05 | `Connection: close` on every v1 request | The Windows app answers with HTTP/1.0; OkHttp reused those connections and they failed |
+| 2026-10-05 | Read the peer's certificate from the TLS socket, not from OkHttp's `handshake` | OkHttp leaves `peerCertificates` empty for self-signed certificates |
+
+Known gaps in the first build:
+- Android 15 limits `dataSync` foreground services to 6 hours a day; the service stops when that runs out.
+- Files shared from other apps are read later, when the send starts; a few apps take back access before then.
+- No protocol v2 yet, so no resume and no device proof.
 
 Open questions for the owner (from `docs/PLAN.md`, section F):
 - Who builds the Android app, and is there a date?
@@ -125,6 +135,13 @@ Open questions for the owner (from `docs/PLAN.md`, section F):
 - How is the project paid for?
 
 ## Log
+
+### 2026-10-05 (later)
+- Gradle project (Gradle 9.8, AGP 9.4.1, Kotlin 2.4.20, Compose BOM 2026.09.00) with `core-protocol`, `core-net`, `core-store`, `core-link`, `transfer`, `ui-mobile` and `app`.
+- `core-protocol` passes every v2 test vector, and its name rules match the Windows app.
+- `core-net`: identity, pinning client, HTTPS server, v1 receiver and sender. The Windows conformance suite passes against it, and files go both ways with the Windows 1.2.1 code.
+- Phone app: MediaStore saving, NSD, Add by IP, share sheet, Accept and Decline notifications, a foreground service, and a home screen.
+- Debug APK builds. Not yet installed on a phone.
 
 ### 2026-10-05
 - Created this private repo.

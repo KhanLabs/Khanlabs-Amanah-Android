@@ -116,7 +116,7 @@ KLv2-proof
 - `sender ID` is your own ID: SHA-256 of `cert`.
 - `subject` is the session ID for `session`, your API port in decimal for `hello`, and empty for `pair` (the line is then just `\n`).
 
-**The signature** is ECDSA with the P-256 curve and SHA-256 over those bytes, in DER form (the normal output of Java's `SHA256withECDSA`, Python's `cryptography` and Swift's `derRepresentation`), then base64. Version 2 needs a P-256 device key. The Windows app has used one since 1.2.0. On Android, make the key in the Android Keystore.
+**The signature** is ECDSA with the P-256 curve and SHA-256 over those bytes, in DER form (the normal output of Java's `SHA256withECDSA`, Python's `cryptography` and Swift's `derRepresentation`), then base64. Version 2 needs a P-256 device key. The Windows app has used one since 1.2.0. The same key is used for TLS. The Android app keeps it in app-private storage, left out of backups, so that a restored phone never gets another phone's ID.
 
 **The receiver checks, in this order:**
 1. The nonce is one it issued, to this client's IP address, less than 120 seconds ago, and not used before. Otherwise `403 bad_nonce`. Mark the nonce used whatever happens next.
