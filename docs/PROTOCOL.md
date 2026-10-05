@@ -109,6 +109,7 @@ Answers:
 | 408 | `timeout` | Nobody answered within 120 seconds. |
 | 400 | `bad_offer`, `bad_files`, `bad_text`, `empty`, `bad_json` | The request breaks a rule above. |
 | 409 | `duplicate` | That offer ID was already used. |
+| 429 | `busy` | Too many offers are already waiting for an answer (2 from your address, or 8 in all). Wait for the person to answer the first one, then try again. |
 | 507 | `no_space` | The files wouldn't fit on the receiving disk. |
 
 The 200 body gives one upload token per file:
@@ -133,6 +134,8 @@ Send one file's bytes as the raw body (`Content-Type: application/octet-stream`)
 | 411 | `length_required` | No `Content-Length`. Chunked uploads aren't supported. |
 | 507 | `no_space` | The disk filled up. |
 | 500 | `failed` | Something else went wrong while saving. |
+
+**Don't pause in the middle of a body.** Since 1.2.1 the receiver drops a connection that sends nothing for 60 seconds. The file is then marked failed and can be uploaded again from the start with the same token.
 
 The receiver writes to a temporary file and only renames it into place when every byte has arrived, so a broken upload never leaves a half file. It never replaces an existing file: if the name is taken it saves as `name (1).ext`, `name (2).ext` and so on. Folders in the path are created as needed.
 
@@ -162,6 +165,8 @@ A phone that wants to receive runs the same API:
 - Make tokens with at least 128 random bits. Compare them in constant time.
 - Save uploads to a temporary file, check that the byte count matches, then move the file into place without replacing anything.
 - Forget an accepted offer when nothing has been uploaded for an hour.
+- Drop a connection that sends nothing for 60 seconds, so a sender that left the network can't hold a file or a thread. Let the same file be uploaded again after that.
+- Limit open connections per address (the Windows app allows 16) and offers waiting for an answer (2 per address, 8 in all; answer the rest with `429 busy`). Show one prompt at a time.
 
 iOS can only receive while the app is in the foreground. Android can keep receiving in a foreground service with a notification.
 
@@ -173,6 +178,7 @@ When a Windows device shares a folder, anyone can open it in a browser: the addr
 
 - Everything is encrypted with TLS. The device ID pin stops someone on the network from pretending to be a device you already know.
 - The first time you meet a device, its ID comes from discovery or `/info`, so the first contact isn't verified. Show the short ID on both screens so people can compare it if they care.
+- **The `sender.id` in an offer is not proof of anything.** Any device can put any ID there. Show it as "not verified", and never use it to skip the prompt. Protocol v2 adds a signed proof for that.
 - Nothing is saved without the receiving person accepting, and accepted files never replace existing ones.
 - Treat every name in an offer as hostile. Check each part as described in 3.2 before you join it to a folder path.
 
