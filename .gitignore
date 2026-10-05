@@ -1,0 +1,28 @@
+# Gradle and build output
+.gradle/
+build/
+*/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio and IntelliJ
+.idea/
+*.iml
+local.properties
+
+# Signing: never commit keys or their passwords
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# Release files
+*.apk
+*.aab
+release/
+output-metadata.json
+
+# OS files
+.DS_Store
+Thumbs.db
