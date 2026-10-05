@@ -294,7 +294,7 @@ class Receiver(
             upload.abort()
             f.state = "failed"
             notify { onFile(offer, f) }
-            if (e is SocketTimeoutException) return // the sender went silent; it can send this file again
+            if (e is SocketTimeoutException) return x.hangUp() // the sender went silent; it can send this file again
             if (offer.state != "accepted") return x.fail(410, "cancelled", "This send was cancelled")
             if (e is IOException && isDiskFull(e)) return x.fail(507, "no_space", "This device ran out of space")
             return x.fail(500, "failed", "Upload failed")

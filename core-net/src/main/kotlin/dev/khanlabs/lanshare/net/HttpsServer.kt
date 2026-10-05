@@ -39,6 +39,12 @@ class Exchange internal constructor(
     var answered = false
         private set
 
+    /** Closes the connection without an answer, as when the sender went silent in the middle of a body. */
+    fun hangUp() {
+        answered = true
+        bodyRead = true
+    }
+
     /** Content-Length, or null when it is missing, invalid, or the body is chunked. */
     val contentLength: Long? =
         if (headers.containsKey("transfer-encoding")) null

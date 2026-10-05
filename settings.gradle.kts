@@ -19,4 +19,9 @@ rootProject.name = "khanlabs-lanshare-android"
 include(
     ":core-protocol",
     ":core-net",
+    ":core-store",
+    ":core-link",
+    ":transfer",
+    ":ui-mobile",
+    ":app",
 )
