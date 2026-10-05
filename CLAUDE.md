@@ -16,7 +16,7 @@ Current state: **planning only, no code yet.** The first coding work is Phase 2 
 
 ## Ground rules
 
-1. **The protocol is the contract.** `docs/PROTOCOL.md` is a copy of the master `PROTOCOL.md` in the Windows repo.
+1. **The protocol is the contract.** `docs/PROTOCOL.md` and `docs/PROTOCOL-v2.md` are copies of the master files in the Windows repo, and `docs/v2/` is a copy of its `docs/v2/` (schema and test vectors).
    - Protocol changes are made there first, then copied here in the same piece of work.
    - Never break protocol v1. The app must speak v1 as both sender and receiver, because old Windows exes will be around for years.
    - v2 lives under `/api/kl/v2`.

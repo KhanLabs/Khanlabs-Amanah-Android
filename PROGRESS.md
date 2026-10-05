@@ -18,7 +18,7 @@ Setup:
 - [ ] CI on GitHub Actions: build, unit tests, and `core-protocol` against the Python app
 
 Protocol and identity:
-- [ ] `core-protocol`: models, name rules, chunk math, tree digest, batch format, using the v2 test vectors
+- [ ] `core-protocol`: models, name rules, chunk math, tree digest, batch format, device proof and pairing MAC, passing every case in `docs/v2/vectors.json`
 - [ ] Device certificate (ECDSA P-256, BouncyCastle), device ID, excluded from backup
 - [ ] HTTP/1.1 server on `SSLServerSocket` with idle timeouts and connection limits
 - [ ] OkHttp client with a single-certificate trust manager

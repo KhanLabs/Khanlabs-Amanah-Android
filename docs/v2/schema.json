@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://khanlabs.dev/klshare/v2/schema.json",
+  "title": "KhanLabs Send protocol v2 messages",
+  "description": "Each entry in $defs is one message from PROTOCOL-v2.md. Unknown fields are allowed everywhere, so later versions can add them.",
+  "$defs": {
+    "deviceId": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "randomId": {"description": "Session IDs, tokens and nonces: base64url without padding, 128 random bits or more.", "type": "string", "pattern": "^[A-Za-z0-9_-]{22,64}$"},
+    "fileId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"},
+    "hex64": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "base64": {"type": "string", "pattern": "^[A-Za-z0-9+/]+={0,2}$"},
+    "chunkRanges": {
+      "description": "Half-open ranges of chunk numbers, sorted and not touching: [[0, 5], [7, 8]] means chunks 0 to 4 and 7.",
+      "type": "array",
+      "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 1}], "minItems": 2, "maxItems": 2}
+    },
+    "sender": {
+      "type": "object",
+      "required": ["id", "name", "model"],
+      "properties": {
+        "id": {"$ref": "#/$defs/deviceId"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 63},
+        "model": {"type": "string", "pattern": "^[a-z0-9-]{1,32}$"},
+        "app": {"type": "string", "maxLength": 64},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": {"type": "string", "pattern": "^[a-z_]{1,32}$"},
+        "message": {"type": "string"},
+        "missing": {"$ref": "#/$defs/chunkRanges"}
+      }
+    },
+    "ok": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {"ok": {"const": true}}
+    },
+    "limits": {
+      "type": "object",
+      "required": ["max_streams", "chunk_size", "batch_max_file", "batch_max_bytes", "batch_max_files", "manifest_page"],
+      "properties": {
+        "max_streams": {"type": "integer", "minimum": 1, "maximum": 16},
+        "chunk_size": {"type": "integer", "enum": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864]},
+        "batch_max_file": {"type": "integer", "minimum": 0},
+        "batch_max_bytes": {"type": "integer", "minimum": 0},
+        "batch_max_files": {"type": "integer", "minimum": 0},
+        "manifest_page": {"type": "integer", "minimum": 1, "maximum": 5000}
+      }
+    },
+    "info": {
+      "type": "object",
+      "required": ["protocol", "protocols", "id", "name", "model", "app", "receiving", "features", "limits", "nonce"],
+      "properties": {
+        "protocol": {"const": 2},
+        "protocols": {"type": "array", "items": {"type": "integer"}, "contains": {"const": 2}},
+        "id": {"$ref": "#/$defs/deviceId"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 63},
+        "model": {"type": "string", "pattern": "^[a-z0-9-]{1,32}$"},
+        "app": {"type": "string", "maxLength": 64},
+        "receiving": {"type": "boolean"},
+        "features": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9_]{1,32}$"}, "uniqueItems": true},
+        "limits": {"$ref": "#/$defs/limits"},
+        "nonce": {"$ref": "#/$defs/randomId"}
+      }
+    },
+    "fileEntry": {
+      "type": "object",
+      "required": ["id", "name", "size"],
+      "properties": {
+        "id": {"$ref": "#/$defs/fileId"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "size": {"type": "integer", "minimum": 0},
+        "mtime": {"description": "Last modified, milliseconds since 1970-01-01 UTC.", "type": "integer", "minimum": 0},
+        "kind": {"enum": ["file", "dir"]},
+        "mime": {"type": "string", "maxLength": 255}
+      },
+      "if": {"properties": {"kind": {"const": "dir"}}, "required": ["kind"]},
+      "then": {"properties": {"size": {"const": 0}}}
+    },
+    "summary": {
+      "type": "object",
+      "required": ["count", "bytes"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "bytes": {"type": "integer", "minimum": 0},
+        "names": {"type": "array", "items": {"type": "string", "maxLength": 255}, "maxItems": 5}
+      }
+    },
+    "proven": {
+      "description": "Fields that prove who the sender is (section 4).",
+      "type": "object",
+      "required": ["sender", "cert", "nonce", "proof"],
+      "properties": {
+        "sender": {"$ref": "#/$defs/sender"},
+        "cert": {"$ref": "#/$defs/base64"},
+        "nonce": {"$ref": "#/$defs/randomId"},
+        "proof": {"$ref": "#/$defs/base64"}
+      }
+    },
+    "sessionCreate": {
+      "allOf": [{"$ref": "#/$defs/proven"}],
+      "type": "object",
+      "required": ["session", "summary", "files", "more"],
+      "properties": {
+        "session": {"$ref": "#/$defs/randomId"},
+        "summary": {"$ref": "#/$defs/summary"},
+        "files": {"type": "array", "items": {"$ref": "#/$defs/fileEntry"}, "maxItems": 5000},
+        "more": {"type": "boolean"},
+        "text": {"type": "string", "maxLength": 65536}
+      }
+    },
+    "fileState": {
+      "type": "object",
+      "required": ["state"],
+      "properties": {
+        "state": {"enum": ["partial", "done", "skipped"]},
+        "chunks": {"$ref": "#/$defs/chunkRanges"},
+        "name": {"type": "string"},
+        "reason": {"type": "string", "pattern": "^[a-z_]{1,32}$"}
+      }
+    },
+    "sessionState": {
+      "type": "object",
+      "required": ["session", "state", "version", "chunk_size", "in_order", "manifest_complete"],
+      "properties": {
+        "session": {"$ref": "#/$defs/randomId"},
+        "state": {"enum": ["pending", "accepted", "declined", "cancelled", "expired", "done"]},
+        "version": {"type": "integer", "minimum": 1},
+        "chunk_size": {"$ref": "#/$defs/limits/properties/chunk_size"},
+        "in_order": {"type": "boolean"},
+        "manifest_complete": {"type": "boolean"},
+        "expires_in": {"type": "integer", "minimum": 0},
+        "wanted": {"oneOf": [{"const": "all"}, {"type": "array", "items": {"$ref": "#/$defs/fileId"}}]},
+        "files": {"type": "object", "propertyNames": {"$ref": "#/$defs/fileId"}, "additionalProperties": {"$ref": "#/$defs/fileState"}}
+      }
+    },
+    "sessionCreated": {
+      "allOf": [{"$ref": "#/$defs/sessionState"}],
+      "type": "object",
+      "required": ["token"],
+      "properties": {"token": {"$ref": "#/$defs/randomId"}}
+    },
+    "manifestPage": {
+      "type": "object",
+      "required": ["files", "more"],
+      "properties": {
+        "files": {"type": "array", "items": {"$ref": "#/$defs/fileEntry"}, "maxItems": 5000},
+        "more": {"type": "boolean"}
+      }
+    },
+    "manifestReply": {
+      "type": "object",
+      "required": ["ok", "count"],
+      "properties": {"ok": {"const": true}, "count": {"type": "integer", "minimum": 0}}
+    },
+    "chunkReply": {
+      "type": "object",
+      "required": ["ok", "file", "chunk"],
+      "properties": {"ok": {"const": true}, "file": {"$ref": "#/$defs/fileId"}, "chunk": {"type": "integer", "minimum": 0}}
+    },
+    "doneRequest": {
+      "type": "object",
+      "required": ["alg", "digest"],
+      "properties": {"alg": {"const": "sha256-tree-v1"}, "digest": {"$ref": "#/$defs/hex64"}}
+    },
+    "doneReply": {
+      "type": "object",
+      "required": ["ok", "name"],
+      "properties": {"ok": {"const": true}, "name": {"type": "string", "minLength": 1}}
+    },
+    "batchHeader": {
+      "type": "object",
+      "required": ["file", "size", "sha256"],
+      "properties": {"file": {"$ref": "#/$defs/fileId"}, "size": {"type": "integer", "minimum": 0}, "sha256": {"$ref": "#/$defs/hex64"}}
+    },
+    "batchReply": {
+      "type": "object",
+      "required": ["results"],
+      "properties": {
+        "results": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/fileId"},
+          "additionalProperties": {
+            "type": "object",
+            "required": ["ok"],
+            "properties": {
+              "ok": {"type": "boolean"},
+              "name": {"type": "string"},
+              "error": {"type": "string", "pattern": "^[a-z_]{1,32}$"}
+            }
+          }
+        }
+      }
+    },
+    "pairRequest": {
+      "allOf": [{"$ref": "#/$defs/proven"}],
+      "type": "object",
+      "required": ["mac"],
+      "properties": {"mac": {"$ref": "#/$defs/hex64"}}
+    },
+    "pairReply": {
+      "type": "object",
+      "required": ["ok", "id", "name"],
+      "properties": {"ok": {"const": true}, "id": {"$ref": "#/$defs/deviceId"}, "name": {"type": "string"}}
+    },
+    "helloRequest": {
+      "allOf": [{"$ref": "#/$defs/proven"}],
+      "type": "object",
+      "properties": {"sender": {"required": ["port"]}}
+    }
+  }
+}

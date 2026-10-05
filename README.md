@@ -17,7 +17,7 @@ Send large files, folders and text between Android phones, tablets, Android TV, 
 
 ## Works with
 
-The Windows app, [khanlabs-lanshare](https://github.com/KhanLabs/khanlabs-lanshare). Both apps speak the protocol in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+The Windows app, [khanlabs-lanshare](https://github.com/KhanLabs/khanlabs-lanshare). Both apps speak the protocol in [docs/PROTOCOL.md](docs/PROTOCOL.md). Version 2 is being written in [docs/PROTOCOL-v2.md](docs/PROTOCOL-v2.md).
 
 ## Documents
 
@@ -27,3 +27,5 @@ The Windows app, [khanlabs-lanshare](https://github.com/KhanLabs/khanlabs-lansha
 | [PROGRESS.md](PROGRESS.md) | What is done, what is next, decisions |
 | [docs/PLAN.md](docs/PLAN.md) | Full plan for both apps: review, protocol v2, Android design, roadmap, competitors |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | The protocol (copy; the master copy is in the Windows repo) |
+| [docs/PROTOCOL-v2.md](docs/PROTOCOL-v2.md) | Protocol version 2, draft (copy) |
+| [docs/v2/](docs/v2/) | v2 JSON Schema and test vectors (copies) |
