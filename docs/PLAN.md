@@ -41,7 +41,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 4. Every error is clear and says what to do next.
 5. Only then, new features.
 
-The roadmap (section 6) follows this order. The release gates (section 7.18) are strict. Any single case of a wrong file saved as "done" blocks every release until it is fixed and tested.
+**Build order changed on 2026-10-06.** The owner asked for the UI and the features to be built first. So the work order is: UI and features (R6 and R7, plus the UI parts of R2), then the reliability phases (R1 to R5). The priorities above do not change. What changes is the order of work: nothing is released to the public until the R5 gates pass, so building UI first costs no safety. The release gates (section 7.18) stay strict. Any single case of a wrong file saved as "done" blocks every release until it is fixed and tested.
 
 **Where things stand today**
 - Windows 1.2.1 is built and runs on the owner's PC. It fixed the hang, offer spam, copied identity, sleep and progress problems found in 1.2.0.
@@ -58,9 +58,10 @@ The roadmap (section 6) follows this order. The release gates (section 7.18) are
 
 | Step | Phases | Working days |
 |---|---|---|
-| Reliability first: test lab, v1 fixes, protocol v2 on both apps, hardening | R1 to R5 | 93 to 122 |
+| 1. UI and features first (private builds): phone UI overhaul (done), first run, QR connect, Sharing Shortcuts and Quick Settings tile, Windows UI changes, Share to anyone | R6 and R7 (the UI parts of R2 are counted in the next row) | 21 to 26 |
+| 2. Reliability: test lab, v1 fixes, protocol v2 on both apps, hardening | R1 to R5 | 93 to 122 |
 | First public release: Windows 1.3 and Android 1.0, both with protocol v2 | end of R5 | |
-| Features: UI changes, Share to anyone, TV, direct mode, stores, tip page | R6 to R10 | 81 to 116 |
+| 3. The rest: TV, direct mode, stores, tip page | R8 to R10 | 60 to 90 |
 | **Total** | | **174 to 238 (about 8 to 11 months)** |
 
 **The five gates that matter most** (full list in section 7.18)
@@ -763,7 +764,9 @@ The sender's screen says: "If the browser warns, tap Continue or Keep. The files
 
 ## 6. Roadmap
 
-**Order:** reliability first (R1 to R5), then features (R6 to R10). Nothing is released to the public until R5's gates pass. Patch releases of safety fixes for the existing Windows 1.2.x are allowed if they pass the v1 gates.
+**Order (changed 2026-10-06):** UI and features first (R6 and R7, and the UI parts of R2), then reliability (R1 to R5), then R8 to R10. The phase numbers stay the same so that old notes still match. Nothing is released to the public until R5's gates pass, so features built first are private builds only. When a feature is built before its reliability phase, its tests are written in R1 and run in R5 before release. Patch releases of safety fixes for the existing Windows 1.2.x are allowed if they pass the v1 gates.
+
+**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide.
 
 | Phase | What | Apps | Working days | Release |
 |---|---|---|---|---|

@@ -1,7 +1,7 @@
 # Progress: KhanLabs LAN Share (Android)
 
 Update this file at the end of every work session. Newest entries at the top of "Log".
-The plan is `docs/PLAN.md` (rewritten 2026-10-06). It puts reliability first: phases R1 to R5 (test lab, v1 fixes, protocol v2, hardening) come before the features in R6 to R10. The older "Phase" names below map to it roughly as Phase 0 and 1 = R2 and R3, Phase 2 = R4 and R6, Phase 3 = R8, Phase 4 = R9, Phase 5 = R5 and R10.
+The plan is `docs/PLAN.md` (rewritten 2026-10-06). The work order was changed on 2026-10-06 at the owner's request: UI and features first (R6 and R7, and the UI parts of R2), then the reliability phases R1 to R5 (test lab, v1 fixes, protocol v2, hardening), then R8 to R10. Nothing goes public before the R5 gates pass. The older "Phase" names below map to it roughly as Phase 0 and 1 = R2 and R3, Phase 2 = R4 and R6, Phase 3 = R8, Phase 4 = R9, Phase 5 = R5 and R10.
 
 ## Where things stand (2026-10-06)
 
@@ -10,7 +10,8 @@ The plan is `docs/PLAN.md` (rewritten 2026-10-06). It puts reliability first: ph
 - **Tested on the PC:** the Kotlin receiver passes the Windows repo's conformance suite (36 fast and 2 slow cases). Files and folders go both ways between the Kotlin code and the Windows 1.2.1 code, and the hashes match.
 - **Tested on the phone:** the Windows conformance suite passes against the phone over Wi-Fi (38 of 38, slow tests included).
 - **Done 2026-10-06:** 1 GB with the screen off in deep Doze, and 2,000 files with hard names (see the Log).
-- **Next:** R1 (test lab and CI), then R2 (v1 reliability, discovery and clear errors).
+- **Done 2026-10-06 (later):** phone UI overhaul (commit `0047500`): Send, Activity and Settings tabs, Receiving chip and sheet, folder send, offer countdown, activity history. Tested on the OnePlus 8T, including 200% text and 320 dp wide.
+- **Next:** first-run screen, QR connect, Sharing Shortcuts and Quick Settings tile, thumbnails; then the Windows UI changes; then Share to anyone (R7). After that, the reliability phases R1 to R5.
 
 ## Phase 2: phone app
 
@@ -134,6 +135,8 @@ Done when:
 | 2026-10-06 | "Share to anyone" uses plain HTTP with a secret link, not HTTPS | Browsers don't trust our own certificates and show a worse warning; real certificates need an internet service |
 | 2026-10-06 | 100% free: no ads, subscriptions, limits, account or data collection. Optional support buttons ($2, $5, $10, $25, Custom) in About open `khanlabs.dev/support` in the browser | The promise is the product; the app has no payment code and never contacts the internet itself. Never nag |
 | 2026-10-06 | "Made with ♥ by Khan" always shows at the bottom: Windows footer, every phone screen, every served web page | The owner's request; part of the brand |
+| 2026-10-06 | Build the UI and features first; the reliability phases R1 to R5 come after | The owner's request. Safe, because nothing is released before the R5 gates pass |
+| 2026-10-06 | Debug builds get a text-size and a small-screen option in Settings | OnePlus blocks `wm size`, `wm density` and font scale over adb, so 200% text and 320 dp could not be tested otherwise |
 
 Known gaps in the first build:
 - Android 15 limits `dataSync` foreground services to 6 hours a day; the service stops when that runs out.
@@ -149,6 +152,16 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-06 (UI overhaul)
+- New phone UI, commit `0047500`. Tabs: Send, Activity, Settings. The Receiving chip in the top bar opens a sheet with the switch, the device name, the address, the ID and the save folder with a Show button.
+- Send: Files, Photos and videos, Folder and Text. Pick content first and then a device, or a device first and then content. Folder walks the tree (up to 10,000 files) and keeps sub-folders and empty files. Tested: 12 files, 150.9 MB, at about 11.4 MB/s.
+- Offer sheet: countdown, a pinned Accept and Decline, "New device" wording, a short warning that anyone on the Wi-Fi can send under any name.
+- After a transfer: Open (one file), Show (the exact folder), Share (chooser), Copy (text). All tested.
+- Activity tab: filter chips, tap a card for names and actions, delete one or clear all. Stored on the phone only, in `noBackupFilesDir/history.json`, up to 200 entries.
+- Checked at 200% text and at 320 dp wide. Fixed there: the wrapped "Decline" button, the clipped nav labels, and the title that wrapped.
+- Still open: in the offer sheet at 320 dp and 200%, the "New device" row is partly covered by the "Answer within" text. Light theme, the Text dialog, the share-from-another-app flow and the single-file Open button are not tested on the phone yet.
+- A launch of the Windows app with `pythonw.exe` left two Block rules in Windows Firewall (Private profile). Only `python.exe` has an allow rule. The rules were not changed.
 
 ### 2026-10-06 (later)
 - Rewrote `docs/PLAN.md` as the complete plan (same file in both repos): reliability first (R1 to R5), then features (R6 to R10), a full testing plan with 17 release gates, the UI plan, and the one-time tip page with crypto. Research behind it: `docs/UI-RESEARCH.md` (Android repo).
