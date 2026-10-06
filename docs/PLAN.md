@@ -169,13 +169,13 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 |---|---|---|---|---|---|
 | 18 | mDNS announce and browse (`_klshare._tcp`) | Done | Done | Not started | Done |
 | 19 | Re-announce when the network changes | Partly: built; not tested on a real network change | Partly: not tested | Not started | R1 (test), A: R2 |
-| 20 | Re-check a "lost" device with `/info` before removing it | n/a | Done | Not started | Done |
+| 20 | Re-check a "lost" device with `/info` before removing it | Done 2026-10-06 (`Discovery.recheck`: every 10 s for 10 minutes) | Done | Not started | Done |
 | 21 | Add a device by IP address | Done | Done | Not started | Done |
 | 22 | Show a QR code to connect (address, port, full ID) | Not started | Not started | Not started | R2; TV R8 |
 | 23 | Scan a QR code to connect (CameraX and ZXing) | n/a | Not started | n/a | R2 |
-| 24 | "Search this network" fallback when multicast is blocked | Not started | Not started | Not started | R2 |
-| 25 | "Not showing up?" help | Not started | Not started | Not started | R2 |
-| 26 | Windows "Public network" check | Not started | n/a | n/a | R2 |
+| 24 | "Search this network" fallback when multicast is blocked | Done 2026-10-06 (`transfer.scan`; not tried on a real /24 yet) | Done 2026-10-07 (`Scan`, a button in Not showing up?; the scan was run from the PC on the real /24 and found the phone in 2.5 s; the screen is not tried on the phone yet) | Not started | R2 |
+| 25 | "Not showing up?" help | Done 2026-10-06 (`find_ui.py`) | Done 2026-10-07 (six steps, the search button, QR and address; the search part is not tried on the phone yet) | Not started | R2 |
+| 26 | Windows "Public network" check | Done 2026-10-06: start-up check, warning card with Open network settings and Allow anyway | n/a | n/a | R2 |
 | 27 | Firewall warning and Fix button | Partly: built; the UAC path is not tested | n/a | n/a | R1 (test) |
 | 28 | Android 17 local network permission (`ACCESS_LOCAL_NETWORK`) | n/a | Not started | Not started | R2 |
 
@@ -186,18 +186,18 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 29 | Limits on connections and pending offers (`429 busy`) | Done | Done | Not started | Done |
 | 30 | New identity when the app is copied to another PC | Done | n/a | n/a | Done |
 | 31 | Identity kept out of backups | n/a | Done (`allowBackup=false`, `noBackupFilesDir`) | Not started | Done |
-| 32 | "New device" wording instead of "not verified" | Not started | Not started | Not started | R2 |
+| 32 | "New device" wording instead of "not verified" | Done 2026-10-06 (offer window; the card badge already said New) | Done 2026-10-06 (the offer sheet says New device and shows the ID) | Not started | R2 |
 | 33 | Device proof (signed, protocol v2) | Partly: spec and reference code | Partly: proof code passes vectors | Not started | W: R3, A: R4 |
 | 34 | QR pairing | Not started | Not started | Not started | W: R3, A: R4, TV: R8 |
 | 35 | Paired devices list (rename, forget) | Not started | Not started | Not started | W: R3, A: R4 |
 | 36 | Receive policy: Off, Ask every time, Paired devices only, Everyone for 10 minutes | Partly: receive on/off only | Partly: receive on/off only | Not started | W: R3, A: R4 |
 | 37 | Accept without asking, per paired device | Not started | Not started | Not started | W: R3, A: R4, TV: R8 |
-| 38 | Private-address guard (refuse non-local addresses) | Not started | Not started | Not started | R2 |
-| 39 | Mark received files as "from another computer" on Windows (Mark of the Web) | Not started | n/a | n/a | R2 |
-| 40 | Local error log and "Copy error report" button | Partly: `error.log` exists | Not started | Not started | R2 |
-| 41 | Clear error messages with a next step, for every failure | Partly | Partly | Not started | R2 |
+| 38 | Private-address guard (refuse non-local addresses) | Done 2026-10-06 (`netinfo.is_local_address`, checked in `transfer.connect`; VPN range 100.64/10 needs a Settings checkbox, as in Q10) | Done 2026-10-07 (`Clients` refuses non-local addresses; the VPN switch is not on a screen yet, so 100.64/10 is always refused) | Not started | R2 |
+| 39 | Mark received files as "from another computer" on Windows (Mark of the Web) | Done 2026-10-06 (`motw.py`; device, web page and FTP receives) | n/a | n/a | R2 |
+| 40 | Local error log and "Copy error report" button | Done 2026-10-06 (`report.py`, About window) | Not started | Not started | R2 |
+| 41 | Clear error messages with a next step, for every failure | Done for send, Add by IP and refusals 2026-10-06 (`errors.py`); the web page and FTP errors are not covered | Partly: send, Add by IP and refusals done 2026-10-07 (`Errors`); other messages not covered | Not started | R2 |
 | 41a | Sender makes every name safe before sending (v1) | Done (commit c21d535, `safe_part` and `safe_relpath`) | Done (`Names.safePart`) | Not started | Done; CI corpus in R1 |
-| 41b | A refused offer names the file and the reason, and the sender shows it | Not started (today: "each file needs a unique id, a valid relative name and a size") | Not started | Not started | R2 |
+| 41b | A refused offer names the file and the reason, and the sender shows it | Done 2026-10-06 (`transfer.name_problem`, `errors.refusal`) | Done 2026-10-07 (`Names.problem`, `OfferCheck`, `Errors.refusal`) | Not started | R2 |
 
 ### 3.4 Receiving, saving and history
 
@@ -219,13 +219,13 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 50 | Content-first Send buttons: Files, Photos, Folder, Text | n/a | Not started (device-first works) | n/a | R6 |
 | 51 | Recent devices in the Android share sheet (Sharing Shortcuts) | n/a | Not started | n/a | R6 |
 | 52 | Quick Settings tile for receiving | n/a | Not started | n/a | R6 |
-| 53 | Drag and drop onto a device (`tkinterdnd2`) | Not started | n/a | n/a | R6 |
-| 54 | Explorer "Send to" entry (opt-in) | Not started | n/a | n/a | R6 |
+| 53 | Drag and drop onto a device (`tkinterdnd2`) | Done 2026-10-06: onto the Send tab or one card. Not tried with a real drag from Explorer. A frozen test program loads the library | n/a | n/a | R6 |
+| 54 | Explorer "Send to" entry (opt-in) | Done 2026-10-06: Settings checkbox, shortcut, second copy hands the paths over. Not tried by clicking in Explorer | n/a | n/a | R6 |
 | 55 | Phone tabs: Send, Activity, Settings | n/a | Not started | n/a | R6 |
-| 56 | Receiving chip and Receiving sheet | Not started | Not started | n/a | R6 |
-| 57 | Windows: four tabs (Send, Share a folder, History, Settings), device cards | Not started (five tabs and a table today) | n/a | n/a | R6 |
+| 56 | Receiving chip and Receiving sheet | Partly: chip with on or off and Open received files (2026-10-06). No Receiving sheet or policy list | Done 2026-10-06 (Receiving chip and sheet; the policy list is not built) | n/a | R6 |
+| 57 | Windows: four tabs (Send, Share a folder, History, Settings), device cards | Partly: Send tab and device cards done 2026-10-06. Five tabs, because Messages is a tab of its own | n/a | n/a | R6 |
 | 58 | First-run screen | Not started | Not started | Not started | A: R2 (minimal), W: R6, TV: R8 |
-| 59 | Tray menu: Send files, Show QR code, Receiving on or off | Partly: tray icon, close to tray | n/a | n/a | R6 |
+| 59 | Tray menu: Send files, Show QR code, Receiving on or off | Done 2026-10-06, with Open received files. Not looked at on screen | n/a | n/a | R6 |
 
 ### 3.6 Brand, About and tips
 
@@ -246,7 +246,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 67 | FTP and FTPS folder share | Done | n/a | n/a | Done |
 | 68 | Fix: notepad save accepts requests from other sites (CSRF) | Not started | n/a | n/a | R2 |
 | 69 | Fix: PIN lockout is per IP only; add a cap for all IPs | Not started | n/a | n/a | R2 |
-| 70 | Fix: "Download all" zip has no length, so a cut download can look complete | Not started | n/a | n/a | R2 |
+| 70 | Fix: "Download all" zip has no length, so a cut download can look complete | Done 2026-10-06 (`zipplan.py`, shared with Share to anyone; a test shrinks a file mid-download and the client sees `IncompleteRead`). Not tried: 20 random cuts in real browsers | n/a | n/a | R2 |
 | 71 | Share to anyone: pick files, QR and link screen | Done | Built, not yet run on the phone | Not started | R7; TV later |
 | 72 | Share to anyone page: grouped files, Download all, Range, PIN, time limit (no thumbnails: the page has no scripts) | Done | Done (tested over sockets) | n/a | R7 |
 | 73 | Web page uploads with v2 chunks (resumable uploads from iPhones) | Not started | n/a | n/a | R10 (nice to have) |
@@ -629,7 +629,7 @@ Base path `/api/kl/v1`, HTTPS, the server certificate pinned by device ID.
 | 2 | **`MSG_PEEK` on Android** to read the first byte without using it up (`SocketPeek.kt`, using `Os.poll` and `Os.recvfrom`). 0x16 means TLS; anything else is plain HTTP. | Android's TLS cannot take back bytes that were already read. Without this, every incoming connection was reset. | Done |
 | 3 | **`Connection: close` on every v1 request.** | Windows answers with HTTP/1.0. OkHttp reused those connections and they failed. v2 uses keep-alive. | Done |
 | 4 | **NSD "lost" devices are re-checked with `/info`** before being removed. | Android 14 reported the PC as lost every minute or two while it was still running. | Done |
-| 5 | **`SO_REUSEADDR` on, except on Windows.** On Windows, use `SO_EXCLUSIVEADDRUSE` instead (check that the Python app does; unverified). | Without it, a restarted Android app moved from port 47820 to 47821. On Windows, `SO_REUSEADDR` lets another program take the same port. | Android done; Windows to check in R2 |
+| 5 | **`SO_REUSEADDR` on, except on Windows.** On Windows, use `SO_EXCLUSIVEADDRUSE` instead (check that the Python app does; unverified). | Without it, a restarted Android app moved from port 47820 to 47821. On Windows, `SO_REUSEADDR` lets another program take the same port. | Android done; Windows done 2026-10-06 (web, send server and FTP listeners use `SO_EXCLUSIVEADDRUSE`; test binds a second socket with `SO_REUSEADDR` and expects it to fail) |
 | 6 | **Android 17 local network permission.** `ACCESS_LOCAL_NETWORK` is a runtime permission in the Nearby devices group. It is enforced for apps that target API 37 or higher. Apps that target 36 or lower keep access through `INTERNET`. It blocks outgoing and **incoming** LAN TCP, UDP unicast, multicast and broadcast, mDNS, SSDP and `NsdManager`. DNS on port 53 is not blocked. When blocked, TCP times out and UDP gets `EPERM`. Sources: [Android 17 behavior changes](https://developer.android.com/about/versions/17/behavior-changes-17), [local network permission](https://developer.android.com/privacy-and-security/local-network-permission). | Our server and discovery would both stop silently on the day we raise `targetSdk` to 37. | Declare it, ask at first run, and test with `adb shell am compat enable RESTRICT_LOCAL_NETWORK <package>` and a reboot (Android 16 Beta 3 or later, or 17). R2. |
 | 7 | **QR pairing replaces the short ID as proof.** The short ID is only 32 bits; matching it takes hours of computer time. It stays as a label. The QR code carries the full 256-bit ID and a 128-bit one-time secret. | Only the QR code (or a future PAKE code) proves who the other device is. | R3 and R4 |
 | 8 | **v2 device proof nonces are tied to the client's IP, not to one connection.** Single use, valid 120 s, at most 32 per IP. | OkHttp's connection pool may use a different connection for the next request. | In `PROTOCOL-v2.md` |
@@ -695,10 +695,10 @@ Base path `/api/kl/v1`, HTTPS, the server certificate pinned by device ID.
 
 ### 5.7 Discovery: "devices are always found"
 1. **mDNS** first (both apps).
-2. **Re-check before removing:** a device reported lost is asked for `/info` first (done on Android; add to Windows).
+2. **Re-check before removing:** a device reported lost is asked for `/info` first (done on Android and on Windows).
 3. **Network changes:** re-announce and re-browse within 10 s of an address change (Windows checks every 10 s; Android uses `ConnectivityManager` network callbacks).
 4. **QR connect:** always works when the devices can reach each other. It is the main fix in "Not showing up?".
-5. **Search this network:** when the user taps it, try TCP port 47820 on every address in the local /24 (up to 32 at a time, 300 ms timeout), then `/info` on the ones that answer. This takes about 10 seconds and finds devices when multicast is blocked. Only on a tap, never in the background.
+5. **Search this network:** when the user taps it, try TCP ports 47820 to 47829 on every address in the local /24 (Windows: 64 at a time, 600 ms to connect, a host that does not answer is skipped after one try), then `/info` on the ones that answer. This takes a few seconds on a home network and finds devices when multicast is blocked. Only on a tap, never in the background.
 6. **Add by IP:** the last fallback.
 7. **Explain failures:** if nothing is found after 10 s, show "Not showing up?" more strongly. If Windows says the network is Public, say so.
 8. **Client isolation** (guest Wi-Fi, some mesh routers) blocks all device-to-device traffic. Nothing on the LAN can fix it. The app says so, and later offers direct mode (R9).
@@ -752,8 +752,7 @@ The sender's screen says: "If the browser warns, tap Continue or Keep. The files
 5. Fallback: `LocalOnlyHotspot` (API 26+), with a standard `WIFI:` QR code plus pairing data. Warn that normal Wi-Fi may drop.
 6. Join with `WifiNetworkSpecifier` (API 29+) and **bind sockets to that network**, or traffic may go over mobile data.
 7. Rule: the device with a screen and no camera (TV, PC) hosts. The phone scans and joins.
-8. **Built 2026-10-06 (phone side, not run on a phone):** `OwnWifi.kt` uses item 5 (`LocalOnlyHotspot`) and item 6 (`WifiNetworkSpecifier` with the process bound to the network). The code carries `ssid` and `psk` next to the Amanah data (`klshare://connect?...&ssid=&psk=`), and a standard `WIFI:` code is also shown and read. Wi-Fi Direct groups (items 3 and 7) are not built yet. Windows: join with `netsh wlan` (not built yet); make a network with a Wi-Fi Direct legacy access point (experimental, not built yet).
-9. Run three short experiments before fixing dates: groups on three or more phone brands; LocalOnlyHotspot plus `WifiNetworkSpecifier`; Windows joining a phone's group.
+8. Run three short experiments before fixing dates: groups on three or more phone brands; LocalOnlyHotspot plus `WifiNetworkSpecifier`; Windows joining a phone's group.
 
 ### 5.10 Android TV (R8, unchanged in substance)
 1. One APK: `leanback` and `touchscreen` both `required="false"`, a `LEANBACK_LAUNCHER` activity, a 320x180 banner.
@@ -770,7 +769,7 @@ The sender's screen says: "If the browser warns, tap Continue or Keep. The files
 
 **Order (changed 2026-10-06):** UI and features first (R6 and R7, and the UI parts of R2), then reliability (R1 to R5), then R8 to R10. The phase numbers stay the same so that old notes still match. Nothing is released to the public until R5's gates pass, so features built first are private builds only. When a feature is built before its reliability phase, its tests are written in R1 and run in R5 before release. Patch releases of safety fixes for the existing Windows 1.2.x are allowed if they pass the v1 gates.
 
-**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide. Added later the same day: the first-run screen, QR connect in both directions (`klshare://connect`, local addresses only, full ID pinned), links from a camera app, a Quick Settings tile, devices in the Share menu and the app icon menu, and photo previews in Activity. Added on 2026-10-06 (later): Share to anyone on both apps. Own Wi-Fi on the phone was added on 2026-10-06 (later still; compiled, not run on a phone). Still to build in this stretch: the Windows UI changes, and Own Wi-Fi on Windows (section 5.9).
+**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide. Added later the same day: the first-run screen, QR connect in both directions (`klshare://connect`, local addresses only, full ID pinned), links from a camera app, a Quick Settings tile, devices in the Share menu and the app icon menu, and photo previews in Activity. Still to build in this stretch: the Windows UI changes and Share to anyone.
 
 | Phase | What | Apps | Working days | Release |
 |---|---|---|---|---|

@@ -167,6 +167,12 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-07 (Search this network, Android)
+- The "Not showing up?" sheet has a **Search this network** button (step 5), with a progress bar, a Stop button and a result line. `Engine.searchNetwork` runs `Scan.run` on a worker thread, keeps the devices it finds like ones added by address, and ends when the sheet closes. It runs only when tapped.
+- "Add by IP" now shows the plain messages from `Errors.addByIp` (for example "Nothing answered at 192.168.1.9. Check the address, and that Amanah is open there with Receiving on.").
+- Checked: the app builds and the Kotlin tests pass. `Scan.run` was also run from the PC on the real home network (a throwaway JVM test, not kept): it took 2.5 s for the 253 other addresses and found the phone with the right name and port. **Not tried on the phone:** the sheet, the progress bar and the result line (the owner had the phone).
+- `docs/PLAN.md` in both repos is now the same file again (the two copies had drifted: Windows rows were stale in the Android copy, and the Share to anyone rows in the Windows copy). Rows 24, 25, 32, 38, 41, 41b and 56 were updated for Android.
+
 ### 2026-10-07 (phone checks)
 - Run on the OnePlus 8T (Android 14) with a test receiver on the PC (`rx_server.py`, port 47840, added with Add by IP) and the Windows protocol code as the other side.
 - **Messages:** a text sent from the phone arrived at the receiver. A text sent back from the same device ID and address came in without a prompt, raised the unread count to 1 on the conversation row, and showed a notification with Reply and Mark as read. Opening the conversation cleared the count and the notification. Not run: tapping Reply or Mark as read in the notification.
