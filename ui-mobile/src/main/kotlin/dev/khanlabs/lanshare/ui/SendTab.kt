@@ -60,6 +60,7 @@ internal fun SendTab(
     onAddByIp: () -> Unit,
     onHelp: () -> Unit,
     onShareAnyone: () -> Unit,
+    onOwnWifi: () -> Unit,
 ) {
     val devices = s.nearby + s.added
     val live = s.incoming.filter { it.state != "waiting" }
@@ -87,6 +88,7 @@ internal fun SendTab(
             }
         }
         item { ShareAnyoneCard(s.share, onShareAnyone) }
+        item { OwnWifiCard(s.ownWifi, onOwnWifi) }
         item {
             SectionHeader("Nearby") {
                 IconButton(onClick = { Engine.refreshNearby() }) { Glyph(Icons.Refresh, description = "Refresh") }

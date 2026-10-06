@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps the receiver running while the app is in the background, with a "Ready to receive" notification.
- * It runs while receiving is on or a share to anyone is live; when both end it stops.
+ * It runs while receiving is on, a share to anyone is live, or a Wi-Fi network is made or joined; when all end it stops.
  */
 class TransferService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -34,13 +34,24 @@ class TransferService : Service() {
         super.onCreate()
         Notifications.createChannels(this)
         goForeground("Starting")
-        if (!Engine.receiving && !Engine.sharing) return stopSelf() // restarted by Android with nothing to do
+        if (!Engine.needsService) return stopSelf() // restarted by Android with nothing to do
         Thread { Engine.startReceiving() }.start()
         scope.launch {
             Engine.state.map { s ->
                 val share = s.share
+                val own = s.ownWifi
+                val busy = listOfNotNull(
+                    if (share != null && share.live) "Sharing ${share.items} ${if (share.items == 1) "item" else "items"}" else null,
+                    when (own.mode) {
+                        OwnWifiView.Mode.Hosting -> "Wi-Fi network \"${own.ssid}\" is on"
+                        OwnWifiView.Mode.Starting -> "Making a Wi-Fi network"
+                        OwnWifiView.Mode.Joining -> "Joining \"${own.ssid}\""
+                        OwnWifiView.Mode.Joined -> "Joined \"${own.ssid}\""
+                        OwnWifiView.Mode.Off -> null
+                    },
+                )
                 when {
-                    share != null && share.live -> "Sharing ${share.items} ${if (share.items == 1) "item" else "items"} on this Wi-Fi"
+                    busy.isNotEmpty() -> busy.joinToString(". ")
                     s.listenError != null -> s.listenError
                     s.port == null -> "Starting"
                     !s.receiving -> "Receiving is off"
@@ -71,6 +82,7 @@ class TransferService : Service() {
         scope.cancel()
         Engine.stopReceiving()
         Engine.shareServiceGone()
+        Engine.stopOwnNetwork()
         super.onDestroy()
     }
 
@@ -83,9 +95,9 @@ class TransferService : Service() {
             context.stopService(Intent(context, TransferService::class.java))
         }
 
-        /** Runs the service while receiving is on or a share is live, and stops it otherwise. Call from the screen. */
+        /** Runs the service while receiving is on, a share is live or a Wi-Fi network is up, and stops it otherwise. Call from the screen. */
         fun sync(context: Context) {
-            if (Engine.receiving || Engine.sharing) start(context) else stop(context)
+            if (Engine.needsService) start(context) else stop(context)
         }
     }
 }

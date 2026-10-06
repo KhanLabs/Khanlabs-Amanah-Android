@@ -83,4 +83,37 @@ class ConnectCodeTest {
         assertEquals(63, code?.name?.length)
         assertTrue(code!!.name.startsWith("Khan "))
     }
+    @Test
+    fun aCodeCanNameAWifiNetworkToJoinFirst() {
+        // The same string is the golden value in the Windows repo's test_connect_code.py
+        val golden = "klshare://connect?v=1&id=$id&name=Khan%27s+PC&ip=192.168.43.1&port=47820&ssid=AndroidShare_4821&psk=k9d2Lm4qXw"
+        val code = ConnectCode(id, "Khan's PC", listOf("192.168.43.1"), 47820, "AndroidShare_4821", "k9d2Lm4qXw")
+        assertEquals(golden, code.toText())
+        assertEquals(code, ConnectCode.parse(golden))
+        assertTrue(code.hasWifi)
+    }
+
+    @Test
+    fun aCodeWithoutAWifiNetworkIsUnchanged() {
+        val code = ConnectCode(id, "PC", listOf("10.0.0.2"), 47820)
+        assertFalse(code.hasWifi)
+        assertFalse("ssid" in code.toText())
+        assertEquals("", ConnectCode.parse(code.toText())?.ssid)
+    }
+
+    @Test
+    fun aNetworkNameOrPasswordThatBreaksTheRulesIsDropped() {
+        val base = "klshare://connect?v=1&id=$id&ip=10.0.0.2&port=47820"
+        for (extra in listOf("&ssid=Net", "&psk=longenough1", "&ssid=Net&psk=short", "&ssid=Net&psk=" + "a".repeat(64),
+            "&ssid=&psk=longenough1", "&ssid=" + "n".repeat(33) + "&psk=longenough1", "&ssid=Net&psk=pass%01word1")) {
+            val code = assertNotNull(ConnectCode.parse(base + extra), extra)
+            assertEquals("", code.ssid, extra)
+            assertEquals("", code.psk, extra)
+        }
+        // the limit is 32 bytes, not 32 characters: three 3-byte letters fit ten times over, eleven times do not
+        val ok = "日".repeat(10)
+        assertEquals(ok, ConnectCode(id, "PC", listOf("10.0.0.2"), 47820, ok, "longenough1").let { ConnectCode.parse(it.toText()) }?.ssid)
+        val tooLong = "日".repeat(11)
+        assertEquals("", ConnectCode.parse(ConnectCode(id, "PC", listOf("10.0.0.2"), 47820, tooLong, "longenough1").toText())?.ssid)
+    }
 }

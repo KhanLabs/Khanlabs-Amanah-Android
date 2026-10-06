@@ -126,6 +126,8 @@ data class UiState(
     /** Every text in every conversation, oldest first. */
     val messages: List<ChatMessage> = emptyList(),
     val share: ShareView? = null,
+    /** The Wi-Fi network this phone made or joined because there was no router. */
+    val ownWifi: OwnWifiView = OwnWifiView(),
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
@@ -166,7 +168,8 @@ object Engine : ReceiverEvents {
     private var wifiLock: WifiManager.WifiLock? = null
     private var share: ShareServer? = null
     private var shareEndsAt: Long? = null
-    @Volatile private var shareWasLive = false
+    private lateinit var own: OwnWifi
+    @Volatile private var serviceWanted = false
 
     private val prefs by lazy { app.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     // no_backup, like the identity: a restore on another phone must not bring this phone's activity along
@@ -188,6 +191,7 @@ object Engine : ReceiverEvents {
         // no_backup: a phone restored from a backup must not get this phone's device ID
         identity = Identity.loadOrCreate(File(app.noBackupFilesDir, "identity"), "Android")
         loadAdded()
+        own = OwnWifi(app, main) { addresses = Discovery.lanAddresses(); refresh() }
         discovery = Discovery(app, identity.id, ::answers) { found -> nearby = found; refresh() }
         watchNetwork()
         addresses = Discovery.lanAddresses()
@@ -219,6 +223,9 @@ object Engine : ReceiverEvents {
 
     /** True while a share to anyone is handing files out. */
     val sharing: Boolean get() = synchronized(lock) { share }?.live() == true
+
+    /** The foreground service must run: receiving is on, a share is live, or a Wi-Fi network is made or joined. */
+    val needsService: Boolean get() = receiving || sharing || (::own.isInitialized && own.view.active)
 
     /** Debug builds only: scales text so large-font layouts can be tested on phones that won't change the system size. */
     fun setDebugFontScale(scale: Float) {
@@ -580,9 +587,12 @@ object Engine : ReceiverEvents {
     fun myCode(): ConnectCode? {
         val s = state.value
         val port = s.port ?: return null
-        val hosts = s.addresses.filter { ConnectCode.isLocalAddress(it) }
+        val o = s.ownWifi
+        val hosts = (o.addresses + s.addresses).filter { ConnectCode.isLocalAddress(it) }.distinct()
         if (hosts.isEmpty()) return null
-        return ConnectCode(identity.id, s.name, hosts.take(ConnectCode.MAX_HOSTS), port)
+        // on a network this phone made, the code also carries its name and password: one scan joins and connects
+        val wifi = o.hosting && o.addresses.isNotEmpty()
+        return ConnectCode(identity.id, s.name, hosts.take(ConnectCode.MAX_HOSTS), port, if (wifi) o.ssid else "", if (wifi) o.psk else "")
     }
 
     fun forget(device: Device) {
@@ -616,10 +626,43 @@ object Engine : ReceiverEvents {
         }
     }
 
+    // --- own Wi-Fi network (no router)
+
+    /** Makes a Wi-Fi network on this phone. The screen asks for the permission first. The result shows in [UiState.ownWifi]. */
+    fun startOwnNetwork() {
+        main.post {
+            own.startHosting()
+            TransferService.start(app)
+        }
+    }
+
+    fun stopOwnNetwork() {
+        main.post { own.stopAll() }
+    }
+
+    /** Joins a network for this app only (Android asks the person), then calls back on the main thread: null, or a message. */
+    fun joinNetwork(ssid: String, psk: String, onResult: (String?) -> Unit) {
+        main.post {
+            TransferService.start(app)
+            own.join(ssid, psk, onResult)
+        }
+    }
+
+    /** Lets go of a joined network. */
+    fun leaveNetwork() {
+        main.post { own.leave() }
+    }
+
+    /** What a scanned code with a network in it asks for: join the network, then add the device. */
+    fun joinAndConnect(code: ConnectCode, onResult: (device: Device?, error: String?) -> Unit) {
+        joinNetwork(code.ssid, code.psk) { error -> if (error != null) onResult(null, error) else addByCode(code, onResult) }
+    }
+
     // --- share to anyone
 
-    /** The address a phone on this Wi-Fi would use, or null when this phone has none. */
-    private fun shareHost(): String? = addresses.firstOrNull { ConnectCode.isLocalAddress(it) }
+    /** The address a phone on this Wi-Fi would use, or null when this phone has none. On its own network, that network's address. */
+    private fun shareHost(): String? =
+        (own.view.addresses + addresses).firstOrNull { ConnectCode.isLocalAddress(it) }
 
     /** Amanah for Android itself, offered on the page. Not offered when Android split the install into several files. */
     private fun shareDownloads(): List<ShareDownload> {
@@ -738,21 +781,22 @@ object Engine : ReceiverEvents {
                 history = history.all,
                 messages = chats.all,
                 share = shareView(),
+                ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
                 debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )
         }
         _state.value = snapshot
         holdLocks(snapshot)
-        val live = snapshot.share?.live == true
-        if (shareWasLive && !live && !receiving) main.post { TransferService.stop(app) } // nothing left for the service to do
-        shareWasLive = live
+        val need = receiving || snapshot.share?.live == true || snapshot.ownWifi.active
+        if (serviceWanted && !need) main.post { TransferService.stop(app) } // nothing left for the service to do
+        serviceWanted = need
     }
 
     /** Keeps the CPU and Wi-Fi awake while something is moving, so a send survives the screen turning off. */
     @Suppress("DEPRECATION")
     private fun holdLocks(s: UiState) {
-        val busy = s.share?.live == true || s.incoming.any { it.state == "accepted" } ||
+        val busy = s.share?.live == true || s.ownWifi.active || s.incoming.any { it.state == "accepted" } ||
             s.outgoing.any { it.state == SendJob.State.SENDING || it.state == SendJob.State.WAITING }
         synchronized(this) {
             if (busy && wakeLock == null) {

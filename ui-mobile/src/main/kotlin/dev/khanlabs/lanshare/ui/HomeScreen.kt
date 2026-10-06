@@ -61,6 +61,7 @@ import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
+import dev.khanlabs.lanshare.protocol.WifiCode
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.Items
@@ -113,12 +114,15 @@ fun HomeScreen(
     var tab by rememberSaveable { mutableStateOf(Tab.Send) }
     var aboutOpen by rememberSaveable { mutableStateOf(false) }
     var shareOpen by rememberSaveable { mutableStateOf(false) }  // the Share to anyone screen
+    var wifiOpen by rememberSaveable { mutableStateOf(false) }   // the Wi-Fi network screen
     var receivingOpen by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
     var scanOpen by remember { mutableStateOf(false) }
     var qrOpen by remember { mutableStateOf(false) }
     var connecting by remember { mutableStateOf(false) }
+    var connectingText by remember { mutableStateOf("Checking the device.") }
+    var joinNet by remember { mutableStateOf<Pair<String, String>?>(null) }  // asking whether to join this network
     var linkCode by remember { mutableStateOf<ConnectCode?>(null) }  // asking whether to add this device
     var connectMsg by remember { mutableStateOf<String?>(null) }  // the result of a scan, shown until dismissed
     var renameOpen by remember { mutableStateOf(false) }
@@ -180,6 +184,7 @@ fun HomeScreen(
         tab = Tab.Send
         aboutOpen = false
         shareOpen = false
+        wifiOpen = false
         chatPeer = null
         val content = Pending(
             if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
@@ -206,19 +211,36 @@ fun HomeScreen(
             else -> { sendPending(context, scope, device, content); onShareDone() }   // progress shows under Now on the Send tab
         }
     }
-    /** Add the device a code names, with its full ID pinned. */
+    /** Add the device a code names, with its full ID pinned. A code that names a Wi-Fi network joins it first. */
     fun connect(code: ConnectCode) {
         connecting = true
-        Engine.addByCode(code) { device, error ->
+        connectingText = if (code.hasWifi) "Joining the network, then checking the device. Android may ask you to allow it." else "Checking the device."
+        val done = { device: Device?, error: String? ->
             connecting = false
             connectMsg = if (device != null) "Connected to ${device.name}. It is now in your Nearby list." else error
         }
+        if (code.hasWifi) Engine.joinAndConnect(code, done) else Engine.addByCode(code, done)
     }
-    /** A QR code was read by the scanner in this app. */
+    /** Join a Wi-Fi network from a plain Wi-Fi QR code. */
+    fun join(ssid: String, psk: String) {
+        connecting = true
+        connectingText = "Joining the network. Android may ask you to allow it."
+        Engine.joinNetwork(ssid, psk) { error ->
+            connecting = false
+            connectMsg = error ?: "Joined $ssid. Other Amanah devices on it should show up under Nearby, or use Add by IP."
+        }
+    }
+    /** A QR code was read by the scanner in this app. A code that joins a network asks first. */
     fun scanned(text: String) {
         scanOpen = false
         val code = ConnectCode.parse(text)
-        if (code == null) connectMsg = "That QR code is not from Amanah." else connect(code)
+        val net = WifiCode.parse(text)
+        when {
+            code != null && code.hasWifi -> linkCode = code
+            code != null -> connect(code)
+            net != null -> joinNet = net
+            else -> connectMsg = "That QR code is not from Amanah, and it is not a Wi-Fi code."
+        }
     }
 
     // a message notification was tapped: open that conversation
@@ -227,6 +249,7 @@ fun HomeScreen(
             chatPeer = openChat
             aboutOpen = false
             shareOpen = false
+            wifiOpen = false
             onChatHandled()
         }
     }
@@ -250,7 +273,10 @@ fun HomeScreen(
         ThreadScreen(openThread, s, onBack = { chatPeer = null })
     } else if (shareOpen) {
         BackHandler { shareOpen = false }
-        ShareScreen(s, onBack = { shareOpen = false })
+        ShareScreen(s, onBack = { shareOpen = false }, onOwnWifi = { shareOpen = false; wifiOpen = true })
+    } else if (wifiOpen) {
+        BackHandler { wifiOpen = false }
+        OwnWifiScreen(s, onBack = { wifiOpen = false }, onScan = { scanOpen = true }, onReceivingChange = onReceivingChange)
     } else if (aboutOpen) {
         BackHandler { aboutOpen = false }
         AboutScreen(onBack = { aboutOpen = false })
@@ -300,6 +326,7 @@ fun HomeScreen(
                         onAddByIp = { addOpen = true },
                         onHelp = { helpOpen = true },
                         onShareAnyone = { shareOpen = true },
+                        onOwnWifi = { wifiOpen = true },
                     )
                     Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
                     Tab.Activity -> ActivityTab(s.history)
@@ -340,21 +367,38 @@ fun HomeScreen(
         text = { Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(28.dp))
             Spacer(Modifier.width(16.dp))
-            Text("Checking the device.")
+            Text(connectingText)
         } },
     )
     linkCode?.let { code ->
         AlertDialog(
             onDismissRequest = { linkCode = null },
-            title = { Text("Add this device?") },
+            title = { Text(if (code.hasWifi) "Join the network and add this device?" else "Add this device?") },
             text = { Column {
                 Text(code.name.ifEmpty { "Unnamed device" }, style = MaterialTheme.typography.titleMedium)
                 Muted("${code.hosts.first()}:${code.port}  ·  ID ${DeviceId.short(code.id)}", mono = true)
+                if (code.hasWifi) {
+                    Spacer(Modifier.height(8.dp))
+                    Muted("Wi-Fi network: ${code.ssid}. It has no internet. Your phone's other apps keep using their own connection.")
+                }
                 Spacer(Modifier.height(8.dp))
-                Muted("Only add it if you scanned this code yourself, on your own network.")
+                Muted("Only add it if you scanned this code yourself.")
             } },
-            confirmButton = { Button(onClick = { linkCode = null; connect(code) }) { Text("Add") } },
+            confirmButton = { Button(onClick = { linkCode = null; connect(code) }) { Text(if (code.hasWifi) "Join and add" else "Add") } },
             dismissButton = { TextButton(onClick = { linkCode = null }) { Text("Cancel") } },
+        )
+    }
+    joinNet?.let { (ssid, psk) ->
+        AlertDialog(
+            onDismissRequest = { joinNet = null },
+            title = { Text("Join this Wi-Fi network?") },
+            text = { Column {
+                Text(ssid, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Muted("Only this app uses it. Your phone's other apps keep their own connection.")
+            } },
+            confirmButton = { Button(onClick = { joinNet = null; join(ssid, psk) }) { Text("Join") } },
+            dismissButton = { TextButton(onClick = { joinNet = null }) { Text("Cancel") } },
         )
     }
     connectMsg?.let { msg ->

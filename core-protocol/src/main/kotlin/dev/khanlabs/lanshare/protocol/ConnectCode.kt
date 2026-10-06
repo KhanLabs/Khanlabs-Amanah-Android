@@ -13,14 +13,31 @@ import java.net.URLEncoder
  *
  * Only addresses on the local network are accepted ([isLocalAddress]). A printed or forged code must never make the app
  * contact the internet.
+ *
+ * A device that made its own Wi-Fi network (no router around) adds `&ssid=<name>&psk=<password>`, so one scan joins
+ * the network and connects. The app that reads it still asks the person before it joins anything. Both fields are
+ * kept only when they pass [WifiCode.isValid].
  */
-data class ConnectCode(val id: String, val name: String, val hosts: List<String>, val port: Int) {
+data class ConnectCode(
+    val id: String,
+    val name: String,
+    val hosts: List<String>,
+    val port: Int,
+    val ssid: String = "",
+    val psk: String = "",
+) {
+    /** The code names a Wi-Fi network to join first. */
+    val hasWifi: Boolean get() = ssid.isNotEmpty() && psk.isNotEmpty()
 
     fun toText(): String = buildString {
         append("klshare://connect?v=1&id=").append(id)
         append("&name=").append(URLEncoder.encode(name.take(MAX_NAME), "UTF-8"))
         for (h in hosts.take(MAX_HOSTS)) append("&ip=").append(URLEncoder.encode(h, "UTF-8"))
         append("&port=").append(port)
+        if (hasWifi && WifiCode.isValid(ssid, psk)) {
+            append("&ssid=").append(URLEncoder.encode(ssid, "UTF-8"))
+            append("&psk=").append(URLEncoder.encode(psk, "UTF-8"))
+        }
     }
 
     companion object {
@@ -55,7 +72,10 @@ data class ConnectCode(val id: String, val name: String, val hosts: List<String>
             val hosts = params["ip"].orEmpty().map { it.trim() }.filter { isLocalAddress(it) }.distinct().take(MAX_HOSTS)
             if (hosts.isEmpty()) return null
             val name = params["name"]?.firstOrNull().orEmpty().trim().filter { it >= ' ' }.take(MAX_NAME)
-            return ConnectCode(id!!, name, hosts, port)
+            val ssid = params["ssid"]?.firstOrNull().orEmpty()
+            val psk = params["psk"]?.firstOrNull().orEmpty()
+            val wifi = WifiCode.isValid(ssid, psk)
+            return ConnectCode(id!!, name, hosts, port, if (wifi) ssid else "", if (wifi) psk else "")
         }
 
         /**

@@ -60,9 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.ShareServer
+import dev.khanlabs.lanshare.protocol.WifiCode
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.Items
+import dev.khanlabs.lanshare.transfer.OwnWifiView
 import dev.khanlabs.lanshare.transfer.ShareView
 import dev.khanlabs.lanshare.transfer.UiState
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +78,7 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ShareScreen(s: UiState, onBack: () -> Unit) {
+internal fun ShareScreen(s: UiState, onBack: () -> Unit, onOwnWifi: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,7 +91,7 @@ internal fun ShareScreen(s: UiState, onBack: () -> Unit) {
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val v = s.share
-            if (v == null) Setup(s) else Live(v)
+            if (v == null) Setup(s, onOwnWifi) else Live(v, s.ownWifi)
         }
     }
 }
@@ -98,7 +100,7 @@ internal fun ShareScreen(s: UiState, onBack: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Setup(s: UiState) {
+private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var picked by remember { mutableStateOf<List<SendItem>>(emptyList()) }
@@ -182,13 +184,16 @@ private fun Setup(s: UiState) {
         Switch(checked = usePin, onCheckedChange = { usePin = it })
     }
 
-    if (s.addresses.isEmpty()) {
+    val reachable = s.addresses.isNotEmpty() || s.ownWifi.addresses.isNotEmpty()
+    if (!reachable) {
         Text("This phone is not on Wi-Fi right now. Connect to the Wi-Fi the other person is on, then start.",
             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        Muted("No Wi-Fi anywhere? This phone can make its own network for the other person to join.")
+        OutlinedButton(onClick = onOwnWifi) { Text("Make a network") }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     Button(
-        enabled = picked.isNotEmpty() && s.addresses.isNotEmpty() && !starting,
+        enabled = picked.isNotEmpty() && reachable && !starting,
         onClick = {
             starting = true
             error = null
@@ -216,7 +221,7 @@ private fun Setup(s: UiState) {
 // --- step 2: the QR code, while it is on
 
 @Composable
-private fun Live(v: ShareView) {
+private fun Live(v: ShareView, own: OwnWifiView) {
     val context = LocalContext.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(v.live, v.endsAt) {
@@ -239,6 +244,18 @@ private fun Live(v: ShareView) {
         Text("This phone has no Wi-Fi address right now, so there is no code to scan. Connect to Wi-Fi and it appears here.",
             color = MaterialTheme.colorScheme.error)
     } else {
+        if (own.hosting) {
+            // the other person is not on any network yet: first join this phone's, then open the page
+            SectionHeader("Step 1: join this phone's network")
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                QrCode(WifiCode.toText(own.ssid, own.psk), Modifier.widthIn(max = 240.dp).fillMaxWidth(), "QR code that joins this phone's Wi-Fi network")
+                Spacer(Modifier.height(8.dp))
+                Text("Ask them to scan this with their camera and join. The network has no internet, and their phone may say so.",
+                    textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+                Muted("${own.ssid}  ·  ${own.psk}", mono = true)
+            }
+            SectionHeader("Step 2: open the page")
+        }
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             QrCode(v.url, Modifier.widthIn(max = 300.dp).fillMaxWidth(), "QR code that opens the shared files on a web page")
             Spacer(Modifier.height(8.dp))
@@ -264,7 +281,8 @@ private fun Live(v: ShareView) {
     Counts(v)
     Muted(v.endsAt?.let { "Ends in ${remainingText(it - now)}." } ?: "Stays on until you stop it.")
     if (v.installer) Muted("The page also offers Amanah for Android, so they can install it from this phone.")
-    Muted("Keep this phone on the same Wi-Fi. Sharing stops when you stop it here, or when the time is up.")
+    Muted(if (own.hosting) "Keep this phone's network on. Sharing stops when you stop it here, or when the time is up."
+          else "Keep this phone on the same Wi-Fi. Sharing stops when you stop it here, or when the time is up.")
     Button(
         onClick = { Engine.stopShare() }, modifier = Modifier.fillMaxWidth(),
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,

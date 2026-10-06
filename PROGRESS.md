@@ -14,7 +14,8 @@ The plan is `docs/PLAN.md` (rewritten 2026-10-06). The work order was changed on
 - **Done 2026-10-06 (UI first, part 2):** first-run screen with a one-time permission request, a warning when notifications are off, QR connect (phone shows and scans codes, the PC shows a code), `klshare://` links from a camera app, a Quick Settings tile, devices in other apps' Share menu and the app icon menu, photo previews in Activity, and a fix for the offer sheet at 320 dp and 200%.
 - **Done 2026-10-06 (messages):** the Text button became **Messages**. A Messages tab lists conversations (unread count on the tab), and a conversation screen shows your texts and theirs with a box to reply. A text arrives without a prompt only from a device you already exchanged a message with that went through, and only from an address that device announced. Notification has Reply and Mark as read. Code: `ChatStore` in `core-net`, `Engine.sendMessage/reply`, `MessagesTab.kt`; protocol field `kind:"message"`. 53 Kotlin tests pass. Not yet tried on the phone (no USB connection).
 - **Done 2026-10-06 (Share to anyone):** a person without Amanah scans a QR code and gets a web page with only the files you picked (details in the Log). Code: `ShareServer`, `ShareServerTest`, `ZipPlan`, `SharePage` in `core-net`, `Engine.startShare/stopShare`, `ShareScreen.kt`. 78 Kotlin tests pass (23 protocol, 55 net). The page was checked in a browser at phone width (light and dark). **Not tried on the phone yet** (no USB connection): the screen, the notification, the service, the time limit ending on its own, and a real second phone scanning the code.
-- **Next:** Own Wi-Fi when there is no network (section 5.9 of the plan); a real-camera QR scan; the Windows UI changes; then the reliability phases R1 to R5.
+- **Done 2026-10-06 (own Wi-Fi, phone side):** with no router, the phone can make its own Wi-Fi network (`LocalOnlyHotspot`) or join one (`WifiNetworkSpecifier`). The screen is on the Send tab ("Wi-Fi network"). While the network is on it shows an Amanah code (joins the network and connects in one scan) and a standard Wi-Fi code. Share to anyone shows a two-step code (join, then open the page). Code: `OwnWifi.kt`, `WifiCode.kt`, `ConnectCode` (`ssid` and `psk`), `Engine.startOwnNetwork/joinNetwork/joinAndConnect`, `OwnWifiScreen.kt`. 87 Kotlin tests pass (32 protocol, 55 net). **Never run on a phone**: the hotspot, the join and every screen are compiled only (see the Log).
+- **Next:** Windows side of own Wi-Fi (join a phone's network; make one, experimental); a real-camera QR scan; the remaining Windows UI changes; then the reliability phases R1 to R5.
 
 ## Phase 2: phone app
 
@@ -51,6 +52,14 @@ Share to anyone (`docs/PLAN.md`, section 5.8; brought forward on 2026-10-06 at t
 - [x] "Get Amanah" card on the page: this phone's own APK and an "Open in Amanah" link
 - [ ] Tried on the phone and with a second phone
 - [ ] Works in Chrome, Safari on iPhone, Firefox, Samsung Internet and Brave (plain HTML and CSS, but only Chromium was looked at)
+
+Own Wi-Fi (`docs/PLAN.md`, section 5.9; brought forward on 2026-10-06 at the owner's request):
+- [x] Make a network on the phone (Android 8 and newer), with a permission request, a name and password, and Turn off
+- [x] Join a network by scanning, or by typing the name and password (Android 10 and newer)
+- [x] One scan joins and connects: `klshare://connect` carries `ssid` and `psk`; a plain `WIFI:` code also works
+- [x] Share to anyone shows a two-step code while the phone hosts the network
+- [ ] Tried on a phone: hotspot start, join, the Android prompt, the Share page over it
+- [ ] Tried on three phone brands (some drop the phone's own Wi-Fi while the hotspot is on)
 
 Nice to have:
 - [ ] Clipboard push to trusted devices
@@ -157,6 +166,15 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-06 (own Wi-Fi, Android)
+- `WifiCode` reads and writes the standard `WIFI:T:WPA;S:..;P:..;;` text (escapes for `\ ; , : "`, quotes from phones accepted, WPA and WPA2 only). A network name is 1 to 32 bytes, a password is 8 to 63 printable ASCII characters. The same rules and golden strings are in the Windows repo (`connect_code.py`, `test_connect_code.py`).
+- `ConnectCode` has optional `ssid` and `psk`. A bad pair is dropped and the rest of the code still works, so old apps ignore the extra part and still connect on a shared network.
+- `OwnWifi` (main thread only): `startLocalOnlyHotspot` for making, `WifiNetworkSpecifier` plus `requestNetwork` plus `bindProcessToNetwork` for joining (traffic of this app only, the network has no internet capability). Needs Nearby devices (Android 13 and newer) or Location (Android 8 to 12, with Location on). The phone's address on its own network is found by diffing the addresses before and after the hotspot starts.
+- The foreground service now runs while receiving, a share or an own network is on. Turning off the service ends the network.
+- A scanned code that names a network asks first ("Join the network and add this device?"), then Android asks again.
+- Decisions: no live hotspot or `netsh wlan connect` test on the PC, because its only connection is Wi-Fi.
+- Not checked: everything on a phone. Open points: some phones turn their own Wi-Fi off while the hotspot is on (the screen warns); Android 9 and older cannot join from an app (the screen says so and points to Wi-Fi settings); with receiving off there is no Amanah code (the screen offers to turn it on).
 
 ### 2026-10-06 (Share to anyone, Android)
 - Same behaviour as the Windows app (`anyone.py`): plain HTTP on its own port (47890, next 9 tried) at `/s/<random 128-bit token>/`; a wrong token or any other path gets the same 404; optional 6-digit PIN (5 free tries per address, then a lock that doubles up to 15 minutes; 20 wrong tries from anywhere in 10 minutes lock everything for 15 minutes); a TLS hello is hung up on; the Host header must be an IP address; the page has no scripts and a strict Content-Security-Policy; the token is never logged. When it ends, the address says "This share has ended" for 5 minutes.
