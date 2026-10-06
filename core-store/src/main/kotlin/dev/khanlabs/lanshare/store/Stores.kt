@@ -1,5 +1,6 @@
 package dev.khanlabs.lanshare.store
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -30,6 +31,36 @@ object Stores {
     fun mimeType(name: String): String {
         val ext = name.substringAfterLast('.', "").lowercase()
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
+    }
+
+    /**
+     * A content:// address for a file this app saved (the name [ReceiveStore.Upload.commit] returned), so other apps
+     * can open or share it. Null if the file is gone or was saved by an earlier install.
+     */
+    fun uriFor(context: Context, saved: String): Uri? {
+        val name = saved.substringAfterLast('/')
+        val relDir = saved.substringBeforeLast('/', "")
+        val resolver = context.contentResolver
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val folder = listOf(Environment.DIRECTORY_DOWNLOADS, FOLDER, relDir).filter { it.isNotEmpty() }
+                    .joinToString("/") + "/"
+                val base = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                resolver.query(base, arrayOf(MediaStore.Downloads._ID),
+                    "${MediaStore.Downloads.RELATIVE_PATH}=? AND ${MediaStore.Downloads.DISPLAY_NAME}=?",
+                    arrayOf(folder, name), null)?.use { if (it.moveToFirst()) return ContentUris.withAppendedId(base, it.getLong(0)) }
+            } else {
+                @Suppress("DEPRECATION")
+                val path = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER), saved).path
+                val base = MediaStore.Files.getContentUri("external")
+                @Suppress("DEPRECATION")
+                resolver.query(base, arrayOf(MediaStore.Files.FileColumns._ID), "${MediaStore.Files.FileColumns.DATA}=?",
+                    arrayOf(path), null)?.use { if (it.moveToFirst()) return ContentUris.withAppendedId(base, it.getLong(0)) }
+            }
+        } catch (e: Exception) {
+            // no access or no such file
+        }
+        return null
     }
 
     internal fun freeBytes(): Long = try {

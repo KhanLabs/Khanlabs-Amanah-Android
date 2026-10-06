@@ -1,12 +1,8 @@
 package dev.khanlabs.lanshare.ui
 
-import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,9 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,7 +54,7 @@ fun AboutScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("About") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(BackArrow, contentDescription = "Back") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Back, contentDescription = "Back") } },
             )
         },
         bottomBar = { MadeWithBar() },
@@ -94,13 +87,13 @@ private fun SupportCard(context: Context) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AMOUNTS.forEach { amount ->
-                    OutlinedButton(onClick = { open(context, "$SUPPORT_URL?amount=$amount") }, Modifier.weight(1f),
+                    OutlinedButton(onClick = { openLink(context, "$SUPPORT_URL?amount=$amount") }, Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
                         Text("$$amount", maxLines = 1, softWrap = false)
                     }
                 }
             }
-            OutlinedButton(onClick = { open(context, SUPPORT_URL) }, Modifier.fillMaxWidth()) { Text("Custom amount") }
+            OutlinedButton(onClick = { openLink(context, SUPPORT_URL) }, Modifier.fillMaxWidth()) { Text("Custom amount") }
             Spacer(Modifier.height(8.dp))
             Muted("Opens khanlabs.dev in your browser. The app itself never connects to the internet.")
         }
@@ -119,26 +112,13 @@ fun MadeWithBar() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Made with ", style = MaterialTheme.typography.bodySmall, color = muted)
-            Icon(Heart, contentDescription = "love", tint = HeartRed, modifier = Modifier.size(14.dp))
+            Icon(Icons.Heart, contentDescription = "love", tint = HeartRed, modifier = Modifier.size(14.dp))
             Text(" by $AUTHOR", style = MaterialTheme.typography.bodySmall, color = muted)
         }
     }
 }
 
-@Composable
-private fun Muted(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-private fun open(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    } catch (e: ActivityNotFoundException) {  // TV boxes often have no browser
-        Toast.makeText(context, "No browser found. Visit $url on another device.", Toast.LENGTH_LONG).show()
-    }
-}
-
-private fun versionName(context: Context): String = try {
+internal fun versionName(context: Context): String = try {
     val pm = context.packageManager
     val info = if (Build.VERSION.SDK_INT >= 33) pm.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
                else @Suppress("DEPRECATION") pm.getPackageInfo(context.packageName, 0)
@@ -148,13 +128,3 @@ private fun versionName(context: Context): String = try {
 }
 
 private val HeartRed = Color(0xFFFF5F57)
-
-/** Material's "favorite" and "arrow back" shapes, drawn here so the app needs no icon library. */
-private val Heart = icon("M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09" +
-    "C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z")
-private val BackArrow = icon("M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
-
-private fun icon(path: String): ImageVector =
-    ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
-        .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))
-        .build()

@@ -61,6 +61,9 @@ data class IncomingView(
     val saved: List<String>,
     val failed: Int,
     val firstNames: List<String>,
+    /** When the offer arrived and when it lapses if nobody answers, in milliseconds since 1970. */
+    val created: Long,
+    val expiresAt: Long,
 )
 
 /** One outgoing send, as the screens show it. */
@@ -94,6 +97,11 @@ data class UiState(
     val conformanceAllowed: Boolean = false,
     val conformance: Boolean = false,
     val folder: String = Stores.SHOWN_PATH,
+    val history: List<HistoryEntry> = emptyList(),
+    /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
+    val debugFontScale: Float = 1f,
+    /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
+    val debugSmallScreen: Boolean = false,
 )
 
 /**
@@ -130,6 +138,8 @@ object Engine : ReceiverEvents {
     private var wifiLock: WifiManager.WifiLock? = null
 
     private val prefs by lazy { app.getSharedPreferences("settings", Context.MODE_PRIVATE) }
+    // no_backup, like the identity: a restore on another phone must not bring this phone's activity along
+    private val history by lazy { History(File(app.noBackupFilesDir, "history.json")) }
 
     val isInitialized: Boolean get() = ::app.isInitialized
 
@@ -165,6 +175,17 @@ object Engine : ReceiverEvents {
 
     fun setReceiving(on: Boolean) {
         prefs.edit().putBoolean("receiving", on).apply()
+        refresh()
+    }
+
+    /** Debug builds only: scales text so large-font layouts can be tested on phones that won't change the system size. */
+    fun setDebugFontScale(scale: Float) {
+        if (debugBuild) prefs.edit().putFloat("debug_font_scale", scale).apply()
+        refresh()
+    }
+
+    fun setDebugSmallScreen(on: Boolean) {
+        if (debugBuild) prefs.edit().putBoolean("debug_small_screen", on).apply()
         refresh()
     }
 
@@ -256,6 +277,10 @@ object Engine : ReceiverEvents {
         if (!conformance && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
             Notifications.received(app, v)
         }
+        if (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty())) {
+            history.add(HistoryEntry("in:${offer.id}", true, v.senderName, if (offer.state == "done") "done" else "partial",
+                v.saved.size, v.received, System.currentTimeMillis(), v.saved.take(History.MAX_NAMES), v.text))
+        }
         refresh()
     }
 
@@ -272,6 +297,8 @@ object Engine : ReceiverEvents {
         saved = o.files.mapNotNull { it.savedName },
         failed = o.files.count { it.state == "failed" },
         firstNames = o.files.take(3).map { it.name },
+        created = o.created,
+        expiresAt = o.created + V1.OFFER_TIMEOUT_S * 1000,
     )
 
     // --- sending
@@ -285,8 +312,32 @@ object Engine : ReceiverEvents {
         refresh()
         io.execute {
             job.run()
+            record(job)
             refresh()
         }
+    }
+
+    private fun record(job: SendJob) {
+        val state = when (job.state) {
+            SendJob.State.DONE -> "done"
+            SendJob.State.DECLINED -> "declined"
+            SendJob.State.FAILED -> "failed"
+            SendJob.State.CANCELLED -> "cancelled"
+            else -> return
+        }
+        history.add(HistoryEntry("out:${job.offerId}", false, job.device.name, state, job.items.size,
+            if (state == "done") job.total else job.sent, System.currentTimeMillis(),
+            job.items.take(History.MAX_NAMES).map { it.name }, job.text, if (state == "failed") job.message else ""))
+    }
+
+    fun removeHistory(id: String) {
+        history.remove(id)
+        refresh()
+    }
+
+    fun clearHistory() {
+        history.clear()
+        refresh()
     }
 
     fun cancelSend(key: Long) {
@@ -415,6 +466,9 @@ object Engine : ReceiverEvents {
                 },
                 conformanceAllowed = debugBuild,
                 conformance = conformance,
+                history = history.all,
+                debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
+                debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )
         }
         _state.value = snapshot

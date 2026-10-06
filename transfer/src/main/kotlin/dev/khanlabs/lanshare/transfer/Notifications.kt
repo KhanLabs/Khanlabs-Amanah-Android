@@ -69,7 +69,7 @@ object Notifications {
             v.fileCount == 1 -> "1 file (${Format.size(v.total)})"
             else -> "${v.fileCount} files (${Format.size(v.total)})"
         }
-        val idText = if (v.senderShortId.isNotEmpty()) " (ID ${v.senderShortId}, not verified)" else ""
+        val idText = if (v.senderShortId.isNotEmpty()) " (new device, ID ${v.senderShortId})" else " (new device)"
         val body = buildString {
             append("${v.senderName}$idText wants to send you $what.")
             if (v.text.isNotEmpty()) append("\n\n").append(v.text.take(500))

@@ -1,7 +1,5 @@
 package dev.khanlabs.lanshare.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -9,35 +7,36 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,19 +45,21 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.khanlabs.lanshare.net.Device
-import dev.khanlabs.lanshare.net.SendJob
+import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
-import dev.khanlabs.lanshare.transfer.IncomingView
 import dev.khanlabs.lanshare.transfer.Items
-import dev.khanlabs.lanshare.transfer.OutgoingView
 import dev.khanlabs.lanshare.transfer.UiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,315 +71,231 @@ data class Shared(val uris: List<Uri> = emptyList(), val text: String = "") {
     val isEmpty: Boolean get() = uris.isEmpty() && text.isEmpty()
 }
 
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Send("Send", Icons.Send), Activity("Activity", Icons.Activity), Settings("Settings", Icons.Settings)
+}
+
+/** Something picked, waiting for a device to be chosen. */
+private class Pending(
+    val what: String,
+    val uris: List<Uri> = emptyList(),
+    val items: List<SendItem> = emptyList(),
+    val text: String = "",
+    val fromShare: Boolean = false,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Boolean) -> Unit) {
     val s by Engine.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var menuFor by remember { mutableStateOf<Device?>(null) }
-    var textFor by remember { mutableStateOf<Device?>(null) }
-    var pickFor by remember { mutableStateOf<Device?>(null) }
+
+    var tab by rememberSaveable { mutableStateOf(Tab.Send) }
+    var aboutOpen by rememberSaveable { mutableStateOf(false) }
+    var receivingOpen by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
-    var aboutOpen by rememberSaveable { mutableStateOf(false) }
+    var clearOpen by remember { mutableStateOf(false) }
+    var detailsFor by remember { mutableStateOf<Device?>(null) }
+    var chooseFor by remember { mutableStateOf<Device?>(null) }   // a device was tapped: what to send it?
+    var textFor by remember { mutableStateOf<Device?>(null) }     // compose text for this device
+    var textFirst by remember { mutableStateOf(false) }           // compose text, then pick a device
+    var dest by remember { mutableStateOf<Device?>(null) }        // the device a running pick will go to, if known
+    var pending by remember { mutableStateOf<Pending?>(null) }
+    var reading by remember { mutableStateOf(false) }
+
+    /** Content is ready: send it to the device already chosen, or ask which device. */
+    fun ready(p: Pending) {
+        val d = dest
+        dest = null
+        if (d != null) sendPending(context, scope, d, p) else pending = p
+    }
 
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        pickFor?.let { if (uris.isNotEmpty()) send(context, scope, it, uris, "") }
-        pickFor = null
+        if (uris.isEmpty()) dest = null else ready(Pending(itemsText(uris.size, "file"), uris = uris))
     }
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        pickFor?.let { if (uris.isNotEmpty()) send(context, scope, it, uris, "") }
-        pickFor = null
+        if (uris.isEmpty()) dest = null else ready(Pending(itemsText(uris.size, "photo or video"), uris = uris))
+    }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree == null) {
+            dest = null
+        } else scope.launch {
+            reading = true
+            val t = withContext(Dispatchers.IO) { Items.fromTree(context, tree) }
+            reading = false
+            when {
+                t.tooMany -> toast(context, "That folder has more than 10,000 files. Send it in parts.")
+                t.items.isEmpty() -> toast(context, "That folder has no files to send.")
+                else -> {
+                    if (t.skipped > 0) toast(context, "${t.skipped} item(s) couldn't be read and were left out")
+                    ready(Pending("folder ${t.folderName} (${itemsText(t.items.size, "file")}, ${Format.size(t.bytes)})", items = t.items))
+                }
+            }
+        }
+    }
+
+    fun startPick(kind: Kind) {
+        when (kind) {
+            Kind.Files -> pickFiles.launch(arrayOf("*/*"))
+            Kind.Media -> pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            Kind.Folder -> pickFolder.launch(null)
+            Kind.Text -> if (dest != null) { textFor = dest; dest = null } else textFirst = true
+        }
+    }
+
+    // something shared from another app: go to the device list at once
+    LaunchedEffect(shared) {
+        if (!shared.isEmpty) {
+            tab = Tab.Send
+            aboutOpen = false
+            pending = Pending(
+                if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
+                uris = shared.uris, text = shared.text, fromShare = true,
+            )
+        }
+    }
+    fun closePending() {
+        if (pending?.fromShare == true) onShareDone()
+        pending = null
     }
 
     if (aboutOpen) {
         BackHandler { aboutOpen = false }
         AboutScreen(onBack = { aboutOpen = false })
-    } else Scaffold(
-        topBar = { TopAppBar(title = { Text("LAN Share") }, actions = { TextButton(onClick = { aboutOpen = true }) { Text("About") } }) },
-        bottomBar = { MadeWithBar() },
-    ) { pad ->
-        LazyColumn(
-            modifier = Modifier.padding(pad).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (!shared.isEmpty) item { ShareBanner(shared, onShareDone) }
-            item { ThisDevice(s, onRename = { renameOpen = true }, onReceivingChange) }
-            item {
-                Header("Send to") {
-                    TextButton(onClick = { Engine.refreshNearby() }) { Text("Refresh") }
-                    TextButton(onClick = { addOpen = true }) { Text("Add by IP") }
-                }
-            }
-            val devices = s.nearby + s.added
-            if (devices.isEmpty()) item { NoDevices(s) }
-            items(devices, key = { "dev:" + it.id }) { d ->
-                DeviceRow(d, isAdded = s.added.any { it.id == d.id }, onForget = { Engine.forget(d) }) {
-                    if (!shared.isEmpty) {
-                        send(context, scope, d, shared.uris, shared.text)
-                        onShareDone()
-                    } else {
-                        menuFor = d
-                    }
-                }
-            }
-            if (s.incoming.isNotEmpty() || s.outgoing.isNotEmpty()) item { Header("Transfers") {} }
-            items(s.incoming, key = { "in:" + it.id }) { IncomingCard(it) }
-            items(s.outgoing, key = { "out:" + it.key }) { OutgoingCard(it) }
-            if (s.conformanceAllowed) item { DebugCard(s) }
-        }
-    }
-
-    menuFor?.let { d ->
-        AlertDialog(
-            onDismissRequest = { menuFor = null },
-            title = { Text("Send to ${d.name}") },
-            text = {
+    } else {
+        BackHandler(enabled = tab != Tab.Send) { tab = Tab.Send }
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("LAN Share", fontFamily = FontFamily.Serif, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    actions = { ReceivingChip(s) { receivingOpen = true }; Spacer(Modifier.width(12.dp)) },
+                )
+            },
+            bottomBar = {
                 Column {
-                    MenuItem("Files") { pickFor = d; menuFor = null; pickFiles.launch(arrayOf("*/*")) }
-                    MenuItem("Photos and videos") {
-                        pickFor = d
-                        menuFor = null
-                        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                    // the labels stop growing at 130%: the bar is a fixed height, and the words are short
+                    val d = LocalDensity.current
+                    CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
+                        NavigationBar(Modifier.height(64.dp), windowInsets = WindowInsets(0, 0, 0, 0)) {
+                            for (t in Tab.entries) NavigationBarItem(
+                                selected = tab == t, onClick = { tab = t }, alwaysShowLabel = true,
+                                icon = { Icon(t.icon, contentDescription = null) },
+                                label = { Text(t.label, maxLines = 1) },
+                            )
+                        }
                     }
-                    MenuItem("Text") { textFor = d; menuFor = null }
+                    MadeWithBar()
                 }
             },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { menuFor = null }) { Text("Cancel") } },
-        )
+        ) { pad ->
+            Box(Modifier.padding(pad)) {
+                when (tab) {
+                    Tab.Send -> SendTab(
+                        s,
+                        onKind = { dest = null; startPick(it) },
+                        onDevice = { chooseFor = it },
+                        onDetails = { detailsFor = it },
+                        onAddByIp = { addOpen = true },
+                        onHelp = { helpOpen = true },
+                    )
+                    Tab.Activity -> ActivityTab(s.history)
+                    Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { clearOpen = true }, { aboutOpen = true })
+                }
+            }
+        }
     }
-    textFor?.let { d -> TextDialog(d, onDone = { textFor = null }) { text -> Engine.send(d, emptyList(), text) } }
+
+    // --- sheets and dialogs
+
+    if (!s.conformance) s.incoming.lastOrNull { it.state == "waiting" }?.let { OfferSheet(it) }
+
+    pending?.let { p ->
+        DevicePickerSheet(p.what, s, onPick = { d ->
+            sendPending(context, scope, d, p)
+            closePending()
+        }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = ::closePending)
+    }
+    chooseFor?.let { d ->
+        WhatToSendSheet(d, onChoose = { kind -> dest = d; chooseFor = null; startPick(kind) }, onDismiss = { chooseFor = null })
+    }
+    if (receivingOpen) ReceivingSheet(s, onReceivingChange, onRename = { renameOpen = true }, onDismiss = { receivingOpen = false })
+    if (helpOpen) HelpSheet(s, onAddByIp = { helpOpen = false; addOpen = true }, onDismiss = { helpOpen = false })
+    detailsFor?.let { d ->
+        DeviceSheet(d, added = s.added.any { it.id == d.id }, onForget = { Engine.forget(d); detailsFor = null }, onDismiss = { detailsFor = null })
+    }
+
+    textFor?.let { d ->
+        TextDialog("Text to ${d.name}", onDone = { textFor = null }) { text -> Engine.send(d, emptyList(), text) }
+    }
+    if (textFirst) TextDialog("Send text", onDone = { textFirst = false }, sendLabel = "Next") { text -> pending = Pending("text", text = text) }
     if (addOpen) AddByIpDialog(onDone = { addOpen = false })
     if (renameOpen) RenameDialog(s.name, onDone = { renameOpen = false })
-    if (!s.conformance) s.incoming.lastOrNull { it.state == "waiting" }?.let { OfferDialog(it) }
-}
-
-private fun send(context: Context, scope: CoroutineScope, device: Device, uris: List<Uri>, text: String) {
-    scope.launch {
-        val (items, skipped) = withContext(Dispatchers.IO) { Items.fromUris(context, uris) }
-        if (skipped > 0) Toast.makeText(context, "$skipped item(s) couldn't be read and were left out", Toast.LENGTH_LONG).show()
-        if (items.isNotEmpty() || text.isNotEmpty()) Engine.send(device, items, text)
-    }
-}
-
-@Composable
-private fun Header(title: String, actions: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        actions()
-    }
-}
-
-@Composable
-private fun Muted(text: String, mono: Boolean = false) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontFamily = if (mono) FontFamily.Monospace else null)
-}
-
-@Composable
-private fun ShareBanner(shared: Shared, onCancel: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            val what = when {
-                shared.uris.isEmpty() -> "this text"
-                shared.uris.size == 1 -> "1 item"
-                else -> "${shared.uris.size} items"
-            }
-            Text("Pick a device to send $what", Modifier.weight(1f))
-            TextButton(onClick = onCancel) { Text("Cancel") }
-        }
-    }
-}
-
-@Composable
-private fun ThisDevice(s: UiState, onRename: () -> Unit, onReceivingChange: (Boolean) -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).clickable(onClick = onRename)) {
-                    Text(s.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Muted("ID ${s.shortId}  (tap the name to change it)", mono = false)
-                }
-                Switch(checked = s.receiving, onCheckedChange = onReceivingChange)
-            }
-            Spacer(Modifier.height(8.dp))
-            when {
-                s.listenError != null -> Text(s.listenError ?: "", color = MaterialTheme.colorScheme.error)
-                !s.receiving -> Muted("Receiving is off. You can still send.")
-                s.port == null -> Muted("Starting")
-                s.addresses.isEmpty() -> Muted("Connect to Wi-Fi to receive")
-                else -> {
-                    Muted("Ready to receive at")
-                    Text(s.addresses.joinToString("  ") { "$it:${s.port}" }, fontFamily = FontFamily.Monospace)
-                    Muted("Files go to ${s.folder}")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NoDevices(s: UiState) {
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            Text("No devices found yet")
-            Spacer(Modifier.height(4.dp))
-            Muted(if (s.receiving) "Open KhanLabs LAN Share on the other device, on the same Wi-Fi. If it still doesn't show up, use Add by IP."
-                  else "Turn on receiving to look for other devices, or use Add by IP.")
-        }
-    }
-}
-
-@Composable
-private fun DeviceRow(d: Device, isAdded: Boolean, onForget: () -> Unit, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(d.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Muted("${d.model.ifEmpty { "device" }}  ·  ID ${d.shortId}  ·  ${d.hosts.firstOrNull() ?: ""}")
-            }
-            if (isAdded) TextButton(onClick = onForget) { Text("Forget") }
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: String, onClick: () -> Unit) {
-    Text(label, Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp),
-        style = MaterialTheme.typography.bodyLarge)
-}
-
-@Composable
-private fun Progress(done: Long, total: Long) {
-    val f = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else 0f
-    LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
-}
-
-@Composable
-private fun IncomingCard(v: IncomingView) {
-    val context = LocalContext.current
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            Text("From ${v.senderName}", style = MaterialTheme.typography.titleMedium)
-            val what = if (v.fileCount == 0) "Message" else "${v.fileCount} file${if (v.fileCount != 1) "s" else ""}, ${Format.size(v.total)}"
-            Muted("$what  ·  ${stateText(v)}")
-            if (v.state == "accepted" && v.fileCount > 0) {
-                Progress(v.received, v.total)
-                Muted("${Format.size(v.received)} of ${Format.size(v.total)}")
-            }
-            for (name in v.saved.take(5)) Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (v.saved.size > 5) Muted("and ${v.saved.size - 5} more")
-            if (v.text.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(v.text, style = MaterialTheme.typography.bodyLarge)
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-                if (v.text.isNotEmpty() && v.state == "done") TextButton(onClick = { copy(context, v.text) }) { Text("Copy text") }
-                when (v.state) {
-                    "waiting" -> {
-                        TextButton(onClick = { Engine.answer(v.id, false) }) { Text("Decline") }
-                        Button(onClick = { Engine.answer(v.id, true) }) { Text("Accept") }
-                    }
-                    "accepted" -> TextButton(onClick = { Engine.cancelIncoming(v.id) }) { Text("Cancel") }
-                    else -> TextButton(onClick = { Engine.dismissIncoming(v.id) }) { Text("Dismiss") }
-                }
-            }
-        }
-    }
-}
-
-private fun stateText(v: IncomingView) = when (v.state) {
-    "waiting" -> "waiting for your answer"
-    "accepted" -> "receiving"
-    "done" -> if (v.fileCount == 0) "received" else "saved"
-    "declined" -> "declined"
-    "expired" -> "not answered in time"
-    "cancelled" -> "cancelled" + if (v.saved.isNotEmpty()) " (${v.saved.size} saved)" else ""
-    else -> v.state
-}
-
-private fun copy(context: Context, text: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Received text", text))
-    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-}
-
-@Composable
-private fun OutgoingCard(v: OutgoingView) {
-    Card {
-        Column(Modifier.padding(16.dp)) {
-            Text("To ${v.deviceName}", style = MaterialTheme.typography.titleMedium)
-            val what = if (v.fileCount == 0) "Message" else "${v.fileCount} file${if (v.fileCount != 1) "s" else ""}, ${Format.size(v.total)}"
-            Muted("$what  ·  ${v.message.ifEmpty { "Connecting" }}")
-            val active = v.state == SendJob.State.CONNECTING || v.state == SendJob.State.WAITING || v.state == SendJob.State.SENDING
-            if (v.state == SendJob.State.SENDING) {
-                Progress(v.sent, v.total)
-                Muted(listOf("${Format.size(v.sent)} of ${Format.size(v.total)}", Format.speed(v.speed), Format.eta(v.etaSeconds))
-                    .filter { it.isNotEmpty() }.joinToString("  ·  "))
-                if (v.current.isNotEmpty()) Muted(v.current)
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
-                if (active) TextButton(onClick = { Engine.cancelSend(v.key) }) { Text("Cancel") }
-                else TextButton(onClick = { Engine.dismissSend(v.key) }) { Text("Dismiss") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DebugCard(s: UiState) {
-    Card {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Conformance mode")
-                Muted("Debug builds only. Answers offers by the sender's name, for the conformance tests. Never use it on a real network.")
-            }
-            Spacer(Modifier.width(8.dp))
-            Switch(checked = s.conformance, onCheckedChange = { Engine.setConformance(it) })
-        }
-    }
-}
-
-@Composable
-private fun OfferDialog(v: IncomingView) {
-    AlertDialog(
+    if (clearOpen) ConfirmDialog(
+        "Clear activity?", "This removes the list of what you sent and received. The files themselves stay where they are.",
+        "Clear", onConfirm = { Engine.clearHistory() }, onDone = { clearOpen = false },
+    )
+    if (reading) AlertDialog(
         onDismissRequest = {},
-        title = { Text("${v.senderName} wants to send") },
-        text = {
-            Column {
-                if (v.fileCount > 0) {
-                    Text("${v.fileCount} file${if (v.fileCount != 1) "s" else ""}, ${Format.size(v.total)}")
-                    for (n in v.firstNames) Muted(n)
-                    if (v.fileCount > v.firstNames.size) Muted("and ${v.fileCount - v.firstNames.size} more")
-                }
-                if (v.text.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(v.text.take(1000))
-                }
-                Spacer(Modifier.height(8.dp))
-                Muted(buildString {
-                    append("From ${v.ip}")
-                    if (v.senderShortId.isNotEmpty()) append(", ID ${v.senderShortId} (not verified)")
-                })
-            }
-        },
-        confirmButton = { Button(onClick = { Engine.answer(v.id, true) }) { Text("Accept") } },
-        dismissButton = { OutlinedButton(onClick = { Engine.answer(v.id, false) }) { Text("Decline") } },
+        confirmButton = {},
+        title = { Text("Reading the folder") },
+        text = { Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
+            Text("Counting the files.")
+        } },
     )
 }
 
+private fun itemsText(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
+
+private fun toast(context: Context, text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+
+private fun sendPending(context: Context, scope: CoroutineScope, device: Device, p: Pending) {
+    scope.launch {
+        val (fromUris, skipped) = if (p.uris.isEmpty()) emptyList<SendItem>() to 0
+                                  else withContext(Dispatchers.IO) { Items.fromUris(context, p.uris) }
+        if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
+        val all = fromUris + p.items
+        if (all.isNotEmpty() || p.text.isNotEmpty()) Engine.send(device, all, p.text)
+    }
+}
+
+// --- the top bar's status chip
+
 @Composable
-private fun TextDialog(d: Device, onDone: () -> Unit, onSend: (String) -> Unit) {
+private fun ReceivingChip(s: UiState, onClick: () -> Unit) {
+    val (label, dot) = when {
+        s.listenError != null -> "Problem" to MaterialTheme.colorScheme.error
+        !s.receiving -> "Not receiving" to MaterialTheme.colorScheme.outline
+        s.addresses.isEmpty() -> "No Wi-Fi" to MaterialTheme.colorScheme.outline
+        s.port == null -> "Starting" to MaterialTheme.colorScheme.outline
+        else -> "Receiving" to MaterialTheme.colorScheme.primary
+    }
+    // a status light, not body text: it stops growing at 130% so the title keeps its room
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
+        AssistChip(
+            onClick = onClick,
+            label = { Text(label, maxLines = 1) },
+            leadingIcon = { Surface(shape = CircleShape, color = dot, modifier = Modifier.size(10.dp)) {} },
+        )
+    }
+}
+
+// --- dialogs
+
+@Composable
+private fun TextDialog(title: String, onDone: () -> Unit, sendLabel: String = "Send", onSend: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDone,
-        title = { Text("Text to ${d.name}") },
+        title = { Text(title) },
         text = { OutlinedTextField(text, { text = it.take(20_000) }, Modifier.fillMaxWidth(), minLines = 3) },
         confirmButton = {
-            Button(onClick = { onSend(text); onDone() }, enabled = text.isNotBlank()) { Text("Send") }
+            Button(onClick = { onSend(text); onDone() }, enabled = text.isNotBlank()) { Text(sendLabel) }
         },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
@@ -426,6 +343,17 @@ private fun RenameDialog(current: String, onDone: () -> Unit) {
             }
         },
         confirmButton = { Button(enabled = name.isNotBlank(), onClick = { Engine.setName(name); onDone() }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun ConfirmDialog(title: String, body: String, action: String, onConfirm: () -> Unit, onDone: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(title) },
+        text = { Text(body) },
+        confirmButton = { Button(onClick = { onConfirm(); onDone() }) { Text(action) } },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
     )
 }

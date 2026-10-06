@@ -27,6 +27,8 @@ private val Dark = darkColorScheme(
     onPrimaryContainer = Ink,
     secondary = Sage,
     onSecondary = Paper,
+    secondaryContainer = Hover,
+    onSecondaryContainer = Teal,
     background = Paper,
     onBackground = Ink,
     surface = Paper,
@@ -48,6 +50,8 @@ private val Light = lightColorScheme(
     primary = TealDark,
     onPrimary = Color.White,
     secondary = Color(0xFF047857),
+    secondaryContainer = Color(0xFFCCF0EA),
+    onSecondaryContainer = TealDark,
     error = Color(0xFFC62828),
 )
 
