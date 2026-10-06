@@ -54,6 +54,17 @@ class ConnectCodeTest {
     }
 
     @Test
+    fun theVpnRangeCountsOnlyWhenAllowed() {
+        for (ip in listOf("100.64.0.1", "100.100.1.1", "100.127.255.254")) {
+            assertFalse(ConnectCode.isLocalAddress(ip), ip)
+            assertTrue(ConnectCode.isLocalAddress(ip, allowVpn = true), ip)
+        }
+        for (ip in listOf("100.63.255.255", "100.128.0.0", "101.64.0.1", "8.8.8.8", "0.0.0.0")) {
+            assertFalse(ConnectCode.isLocalAddress(ip, allowVpn = true), ip)
+        }
+    }
+
+    @Test
     fun keepsOnlyTheLocalAddressesFromAMixedCode() {
         val code = ConnectCode.parse("klshare://connect?v=1&id=$id&ip=8.8.8.8&ip=192.168.1.9&port=47820")
         assertEquals(listOf("192.168.1.9"), code?.hosts)

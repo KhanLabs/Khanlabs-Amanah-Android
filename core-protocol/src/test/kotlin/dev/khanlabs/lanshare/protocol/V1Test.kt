@@ -86,4 +86,45 @@ class V1Test {
         assertEquals("empty", code("""{$ok}"""))
         assertEquals("empty", code("""{$ok,"files":[],"text":""}"""))
     }
+
+    @Test
+    fun problemsAreNamedInTheSameWordsAsWindows() {
+        // The same reasons as the Windows app's name_problem(), so a sender shows the same text whichever app refused.
+        val cases = mapOf(
+            "  notes.txt" to "a name cannot start with a space",
+            "notes.txt " to "a name cannot end with a space",
+            "a|b.txt" to "a name cannot contain |",
+            "CON.txt" to "CON is a name Windows keeps for itself",
+            "x/../y.txt" to "a name cannot contain .. (go up a folder)",
+            "trailing." to "a name cannot end with a dot",
+            "/etc/passwd" to "a name cannot start with a slash",
+            "." to "the name has no file name in it",
+            "" to "the name is empty",
+            "a" + Char(1) + "b" to "a name cannot contain control characters",
+            "x".repeat(256) to "a file or folder name is longer than 255 characters",
+            "d/".repeat(600) + "f" to "the name is longer than 1,024 characters",
+        )
+        for ((name, reason) in cases) {
+            assertNull(Names.cleanRelPath(name), name)
+            assertEquals(reason, Names.problem(name), name)
+        }
+    }
+
+    @Test
+    fun aRefusedFileIsNamedWithTheReason() {
+        val ok = """"offer":"q3V9xY2kL0aB7cD4eF6gH8""""
+        fun message(json: String) = assertFailsWith<ProtocolException> { check(json) }.message
+        assertEquals("\"  notes.txt\": a name cannot start with a space.",
+            message("""{$ok,"files":[{"id":"0","name":"  notes.txt","size":1}]}"""))
+        assertEquals("\"a.txt\": the size is not a whole number of bytes.",
+            message("""{$ok,"files":[{"id":"0","name":"a.txt","size":-1}]}"""))
+        assertEquals("\"b.txt\": every file needs its own id.",
+            message("""{$ok,"files":[{"id":"0","name":"a.txt","size":1},{"id":"0","name":"b.txt","size":1}]}"""))
+        // a name that is not text is shown the way Python shows it
+        assertEquals("\"5\": the name is empty.", message("""{$ok,"files":[{"id":"0","name":5,"size":1}]}"""))
+        // long names are cut for the message
+        val long = "x".repeat(300)
+        assertEquals("\"" + "x".repeat(79) + Char(0x2026) + "\": a file or folder name is longer than 255 characters.",
+            message("""{$ok,"files":[{"id":"0","name":"$long","size":1}]}"""))
+    }
 }

@@ -138,10 +138,19 @@ object OfferCheck {
         for (f in rawFiles) {
             if (f !is JsonObject) throw ProtocolException(400, "bad_files", "each file must be an object")
             val fid = f["id"]?.let { pyStr(it) } ?: ""
-            val name = (f["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.let { Names.cleanRelPath(it) }
+            val rawName = (f["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            val name = rawName?.let { Names.cleanRelPath(it) }
             val size = (f["size"] as? JsonPrimitive)?.takeIf { !it.isString && it.booleanOrNull == null }?.longOrNull
-            if (fid.isEmpty() || fid in seen || fid.length > 64 || name == null || size == null || size < 0) {
-                throw ProtocolException(400, "bad_files", "each file needs a unique id, a valid relative name and a size")
+            // The refusal names the file and the reason, in the same words as the Windows app, so the sender can show it
+            if (name == null) {
+                val shown = if (rawName != null) Names.shown(rawName) else Names.shown(f["name"]?.let { pyStr(it) })
+                throw ProtocolException(400, "bad_files", "\"$shown\": ${Names.problem(rawName)}.")
+            }
+            if (size == null || size < 0) {
+                throw ProtocolException(400, "bad_files", "\"${Names.shown(name)}\": the size is not a whole number of bytes.")
+            }
+            if (fid.isEmpty() || fid in seen || fid.length > 64) {
+                throw ProtocolException(400, "bad_files", "\"${Names.shown(name)}\": every file needs its own id.")
             }
             seen += fid
             files += OfferFile(fid, name, size)

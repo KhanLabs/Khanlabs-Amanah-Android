@@ -3,6 +3,7 @@ package dev.khanlabs.lanshare.net
 import dev.khanlabs.lanshare.protocol.DeviceId
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.net.Socket
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -115,6 +116,61 @@ class LoopbackTest {
         val found = fetchInfo(clients, "127.0.0.1", rx.port)
         assertEquals(identity.id, found.id)
         assertEquals("Conformance Android", found.name)
+    }
+
+    @Test
+    fun aRefusedOfferNamesTheFileAndTheReason() {
+        val cases = mapOf(
+            "  notes.txt" to "a name cannot start with a space",
+            "a|b.txt" to "a name cannot contain |",
+            "CON.txt" to "CON is a name Windows keeps for itself",
+            "trailing." to "a name cannot end with a dot",
+        )
+        for ((name, reason) in cases) {
+            val job = SendJob(clients, me(), device(), listOf(item(name, byteArrayOf(1))))  // a sender that did not make the name safe
+            job.run()
+            assertEquals(SendJob.State.FAILED, job.state, name)
+            assertTrue(reason in job.message, job.message)
+            assertTrue(name.trim() in job.message, job.message)
+            assertTrue("Loopback refused the send" in job.message, job.message)
+            assertTrue("Nothing was sent" in job.message, job.message)
+        }
+        assertTrue(inbox.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun failedSendsSayWhatToDo() {
+        val closed = SendJob(clients, me(), device().copy(port = 1), listOf(item("x.txt", byteArrayOf(1))))
+        closed.run()
+        assertEquals(SendJob.State.FAILED, closed.state)
+        assertTrue("Loopback isn't answering" in closed.message, closed.message)
+        assertTrue("Nothing was sent" in closed.message, closed.message)
+        assertTrue(closed.failure != null)
+
+        val gone = SendJob(clients, me(), device(), listOf(SendItem("gone.txt", 3) { throw FileNotFoundException("gone.txt") }))
+        gone.run()
+        assertEquals(SendJob.State.FAILED, gone.state)
+        assertTrue("gone.txt was moved or deleted" in gone.message, gone.message)
+
+        val short = SendJob(clients, me(), device(), listOf(SendItem("short.txt", 10) { ByteArrayInputStream(ByteArray(3)) }))
+        short.run()
+        assertEquals(SendJob.State.FAILED, short.state)
+        assertTrue("short.txt got shorter while it was being sent" in short.message, short.message)
+    }
+
+    @Test
+    fun onlyAddressesOnThisNetworkAreContacted() {
+        val offNetwork = SendJob(clients, me(), device().copy(hosts = listOf("8.8.8.8")), listOf(item("x.txt", byteArrayOf(1))))
+        offNetwork.run()
+        assertEquals(SendJob.State.FAILED, offNetwork.state)
+        assertTrue("isn't on your local network" in offNetwork.message, offNetwork.message)
+        assertFailsWith<NotLocalException> { fetchInfo(clients, "8.8.8.8", 47820) }
+        assertFailsWith<NotLocalException> { fetchInfo(clients, "example.com", 47820) }
+        assertFailsWith<NotLocalException> { fetchInfo(clients, "100.64.0.1", 47820) } // the VPN range, until it is allowed
+        // allowed: the guard lets it through, so the connection is tried (and fails here, as nothing answers)
+        val vpn = Clients(allowVpn = { true })
+        val e = assertFailsWith<Exception> { fetchInfo(vpn, "100.64.0.1", 47820, timeoutS = 1) }
+        assertTrue(e !is NotLocalException, e.toString())
     }
 
     @Test

@@ -9,6 +9,7 @@ object Names {
     private val BAD_CHARS: Set<Char> = "<>:\"/\\|?*".toSet() + (0 until 32).map { it.toChar() }
     private val RESERVED: Set<String> =
         setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+    private val ELLIPSIS = Char(0x2026).toString()
     const val MAX_PART = 255
     const val MAX_PATH = 1024
 
@@ -28,6 +29,36 @@ object Names {
         val parts = path.replace('\\', '/').split('/').filter { it != "" && it != "." }
         if (parts.isEmpty() || parts.any { it == ".." || it.pyLength() > MAX_PART || cleanName(it) != it }) return null
         return parts.joinToString("/")
+    }
+
+    /** A name from another device, made fit to show in a message: control characters become "?", long names are cut. */
+    fun shown(name: String?): String {
+        val text = (name ?: "").map { if (it < ' ') '?' else it }.joinToString("")
+        return if (text.pyLength() <= 80) text else text.substring(0, text.offsetByCodePoints(0, 79)) + ELLIPSIS
+    }
+
+    /**
+     * Why [cleanRelPath] refuses this name, in words, like the Windows app's name_problem(). The Windows app and
+     * this one give the same reason for the same name, so a sender shows the same text whichever app refused.
+     */
+    fun problem(path: String?): String {
+        if (path.isNullOrEmpty()) return "the name is empty"
+        if (path.pyLength() > MAX_PATH) return "the name is longer than 1,024 characters"
+        if (path[0] == '/' || path[0] == '\\') return "a name cannot start with a slash"
+        val parts = path.replace('\\', '/').split('/').filter { it != "" && it != "." }
+        if (parts.isEmpty()) return "the name has no file name in it"
+        for (part in parts) {
+            if (part == "..") return "a name cannot contain .. (go up a folder)"
+            if (part.pyLength() > MAX_PART) return "a file or folder name is longer than 255 characters"
+            val bad = part.firstOrNull { it in BAD_CHARS }
+            if (bad != null) return if (bad < ' ') "a name cannot contain control characters" else "a name cannot contain $bad"
+            if (part != part.trimStart()) return "a name cannot start with a space"
+            if (part != part.trimEnd()) return "a name cannot end with a space"
+            if (part.endsWith(".")) return "a name cannot end with a dot"
+            val stem = part.substringBefore('.')
+            if (stem.uppercase() in RESERVED) return "$stem is a name Windows keeps for itself"
+        }
+        return "the name is not valid"
     }
 
     /** Length the way Python counts it, so both apps agree on the 255 and 1024 limits. */

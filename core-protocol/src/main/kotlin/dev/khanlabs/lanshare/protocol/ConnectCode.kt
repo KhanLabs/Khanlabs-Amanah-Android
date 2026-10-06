@@ -80,16 +80,17 @@ data class ConnectCode(
 
         /**
          * True for a literal address that stays on the local network: 10.x, 172.16 to 172.31, 192.168.x, 169.254.x,
-         * 127.x, and for IPv6 fe80:: (link-local), fc00::/7 (private) and ::1. Host names are refused, so no lookup
-         * happens.
+         * 127.x, and for IPv6 fe80:: (link-local), fc00::/7 (private) and ::1. With [allowVpn], also 100.64.0.0/10, the
+         * range that Tailscale and other VPNs hand out. Host names are refused, so no lookup happens.
          */
-        fun isLocalAddress(host: String): Boolean {
+        fun isLocalAddress(host: String, allowVpn: Boolean = false): Boolean {
             val m = V4.matchEntire(host)
             if (m != null) {
                 val p = m.groupValues.drop(1).map { it.toInt() }
                 if (p.any { it > 255 }) return false
                 return p[0] == 10 || p[0] == 127 || (p[0] == 172 && p[1] in 16..31) ||
-                    (p[0] == 192 && p[1] == 168) || (p[0] == 169 && p[1] == 254)
+                    (p[0] == 192 && p[1] == 168) || (p[0] == 169 && p[1] == 254) ||
+                    (allowVpn && p[0] == 100 && p[1] in 64..127)
             }
             val bare = host.substringBefore('%')
             if (':' !in bare || !V6_CHARS.matches(bare)) return false

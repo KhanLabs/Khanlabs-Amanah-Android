@@ -1,8 +1,10 @@
 package dev.khanlabs.lanshare.net
 
+import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import java.io.IOException
 import java.security.SecureRandom
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
@@ -35,9 +37,22 @@ class PinningTrustManager(private val expectedId: String?) : X509TrustManager {
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 }
 
-/** OkHttp clients for talking to other devices, one per pinned ID. */
-class Clients(private val base: OkHttpClient = OkHttpClient()) {
+/** The address is not on this network, so the app does not connect to it. */
+class NotLocalException(val host: String) :
+    IOException("That address isn't on your local network, so Amanah won't connect to it.")
+
+/**
+ * OkHttp clients for talking to other devices, one per pinned ID. They connect only to addresses on this network or
+ * this device (see [ConnectCode.isLocalAddress]), so a wrong code or a made-up device entry cannot send files to
+ * the internet. [allowVpn] says whether the range VPNs use (100.64.0.0/10) also counts, as the Settings switch says.
+ */
+class Clients(private val base: OkHttpClient = OkHttpClient(), private val allowVpn: () -> Boolean = { false }) {
     private val cache = ConcurrentHashMap<String, OkHttpClient>()
+    private val onlyLocal = Interceptor { chain ->
+        val host = chain.request().url.host
+        if (!ConnectCode.isLocalAddress(host, allowVpn())) throw NotLocalException(host)
+        chain.proceed(chain.request())
+    }
 
     /** Never retries on its own: an offer sent twice would be refused as a duplicate. */
     fun pinned(expectedId: String?): OkHttpClient = cache.getOrPut(expectedId ?: "") {
@@ -51,6 +66,7 @@ class Clients(private val base: OkHttpClient = OkHttpClient()) {
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor(onlyLocal)
             .addInterceptor(oneRequestPerConnection)
             .addNetworkInterceptor(peerId)
             .build()

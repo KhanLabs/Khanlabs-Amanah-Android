@@ -70,13 +70,13 @@ fun fetchInfo(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expec
     val client = clients.pinned(expectedId).newBuilder()
         .connectTimeout(timeoutS, TimeUnit.SECONDS).readTimeout(timeoutS, TimeUnit.SECONDS).build()
     client.newCall(Request.Builder().url(url(host, port, "/info")).build()).execute().use { r ->
-        val id = r.header(Clients.PEER_ID) ?: throw SendException("That address doesn't answer like a KhanLabs device.")
+        val id = r.header(Clients.PEER_ID) ?: throw SendException("That address doesn't answer like an Amanah device. Check the address.")
         val info = try {
             if (r.code == 200) ProtocolJson.decodeFromString(Info.serializer(), r.bodyText()) else null
         } catch (e: Exception) {
             null
         }
-        if (info == null || info.id != id) throw SendException("That address doesn't answer like a KhanLabs device.")
+        if (info == null || info.id != id) throw SendException("That address doesn't answer like an Amanah device. Check the address.")
         return Device(id, info.name.ifEmpty { host }, info.model, listOf(host), port, info.app)
     }
 }
@@ -112,6 +112,10 @@ class SendJob(
     /** The address that answered. */
     @Volatile var host: String = device.hosts.firstOrNull() ?: ""
         private set
+    /** What stopped the send, for the error log. The message the person sees is [message]. */
+    @Volatile var failure: Throwable? = null
+        private set
+    @Volatile private var fileFailure: Throwable? = null
     @Volatile private var cancelled = false
     @Volatile private var call: Call? = null
     private val rate = Rate()
@@ -149,11 +153,15 @@ class SendJob(
             send()
         } catch (e: Exception) {
             val mismatch = Clients.mismatch(e)
+            val file = fileFailure
+            if (!cancelled) failure = e
             when {
                 mismatch != null -> update(State.FAILED, mismatch.message)
                 cancelled -> update(State.CANCELLED, "Cancelled")
                 e is SendException -> update(State.FAILED, e.message)
-                else -> update(State.FAILED, "Connection problem: ${e.message ?: e.javaClass.simpleName}")
+                file != null -> update(State.FAILED, Errors.fileProblem(current.ifEmpty { "A file" }, file) +
+                    Errors.progressNote(saved.size, items.size))
+                else -> update(State.FAILED, Errors.connectionProblem(e, device.name, saved.size, items.size))
             }
         }
     }
@@ -190,15 +198,15 @@ class SendJob(
         if (code != 200) {
             val err = errorOf(body)
             when (err?.error) {
-                "declined" -> return update(State.DECLINED, "${device.name} declined")
-                "timeout" -> return update(State.DECLINED, "No answer in time")
+                "declined" -> return update(State.DECLINED, Errors.refusal(code, err, device.name))
+                "timeout" -> return update(State.DECLINED, Errors.refusal(code, err, device.name))
             }
-            throw SendException(err?.message?.ifEmpty { null } ?: "The device answered $code", err?.error ?: "")
+            throw SendException(Errors.refusal(code, err, device.name, 0, files.size), err?.error ?: "")
         }
         val tokens = try {
             ProtocolJson.decodeFromString(OfferAccepted.serializer(), body).files
         } catch (e: Exception) {
-            throw SendException("The device's answer wasn't understood")
+            throw SendException("${device.name} answered in a way Amanah doesn't understand. Check that both devices run the latest Amanah.")
         }
         if (files.isEmpty()) return update(State.DONE, "Text sent")
         update(State.SENDING, "Sending")
@@ -220,14 +228,26 @@ class SendJob(
             override fun contentLength() = item.size
             override fun isOneShot() = true
             override fun writeTo(sink: BufferedSink) {
-                item.open().use { input ->
+                val stream = try {
+                    item.open()
+                } catch (e: Exception) {
+                    fileFailure = e
+                    throw IOException("cannot open ${f.name}", e)
+                }
+                stream.use { input ->
                     val buf = ByteArray(CHUNK)
                     var left = item.size
                     var last = 0L
                     while (left > 0) {
                         if (cancelled) throw IOException("cancelled")
-                        val n = input.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
-                        if (n < 0) throw SendException("${f.name} got shorter while it was being sent")
+                        val n = try {
+                            input.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                        } catch (e: IOException) {
+                            fileFailure = e
+                            throw e
+                        }
+                        if (n < 0) throw SendException("${f.name} got shorter while it was being sent. Send it again." +
+                            Errors.progressNote(saved.size, items.size))
                         sink.write(buf, 0, n)
                         left -= n
                         sent += n
@@ -245,7 +265,7 @@ class SendJob(
         clients.pinned(device.id).newCall(request).also { call = it }.execute().use { r ->
             val text = r.bodyText()
             if (r.code != 201) {
-                throw SendException(errorOf(text)?.message?.ifEmpty { null } ?: "${f.name}: the device answered ${r.code}")
+                throw SendException(Errors.refusal(r.code, errorOf(text), device.name, saved.size, items.size))
             }
             return try {
                 ProtocolJson.decodeFromString(UploadReply.serializer(), text).name
