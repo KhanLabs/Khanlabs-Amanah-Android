@@ -5,10 +5,11 @@ The plan these phases come from is `docs/PLAN.md` (section D).
 
 ## Where things stand (2026-10-05)
 
-- **State:** the first phone build (0.1.0, debug) is done. It speaks protocol v1 as sender and receiver, so it works with Windows 1.2.x. It has not been tested on a real phone yet.
+- **State:** the first phone build (0.1.0, debug) works on a OnePlus 8T (Android 14) with Windows 1.2.1: files, folders and text both ways, found automatically, Accept from the notification while the app is in the background.
 - **Windows app:** 1.2.1 has the Phase 0 fixes. The v2 spec, test vectors and conformance runner are written.
 - **Tested on the PC:** the Kotlin receiver passes the Windows repo's conformance suite (36 fast and 2 slow cases). Files and folders go both ways between the Kotlin code and the Windows 1.2.1 code, and the hashes match.
-- **Next:** install on a OnePlus 8T and test against Windows 1.2.1: MediaStore saving, NSD, the foreground service, notifications and the screens.
+- **Tested on the phone:** the Windows conformance suite passes against the phone over Wi-Fi (38 of 38, slow tests included).
+- **Next:** a long transfer with the screen off, and a send picked from the file picker with many files.
 
 ## Phase 2: phone app
 
@@ -22,11 +23,11 @@ Protocol and identity:
 - [x] Device certificate (ECDSA P-256, BouncyCastle), device ID, excluded from backup
 - [x] HTTP/1.1 server with TLS, idle timeouts and connection limits
 - [x] OkHttp client with a single-certificate trust manager
-- [x] Protocol v1, sender and receiver, working with Windows 1.2.x (tested on the PC, not yet on a phone)
+- [x] Protocol v1, sender and receiver, working with Windows 1.2.x (tested on a OnePlus 8T)
 - [ ] Protocol v2, sender and receiver: sessions, chunks, batches, parallel connections, resume journal, device proof
 
 Finding devices:
-- [x] NSD announce and browse (not yet tested on a phone)
+- [x] NSD announce and browse
 - [x] Add a device by IP
 - [ ] QR scan (CameraX and ZXing) to connect and pair
 - [ ] Trusted devices list
@@ -120,6 +121,8 @@ Done when:
 | 2026-10-05 | Plain `ServerSocket` with TLS added per connection | Lets a plain HTTP request get a 301 to `https://`, like the Windows app |
 | 2026-10-05 | `Connection: close` on every v1 request | The Windows app answers with HTTP/1.0; OkHttp reused those connections and they failed |
 | 2026-10-05 | Read the peer's certificate from the TLS socket, not from OkHttp's `handshake` | OkHttp leaves `peerCertificates` empty for self-signed certificates |
+| 2026-10-06 | Peek the first byte with `MSG_PEEK` on Android | Android's TLS can't take back bytes that were already read, and plain HTTP must still get a 301 |
+| 2026-10-06 | Ask a "lost" device for `/info` before removing it | Android 14 reports services as lost while they are still there |
 
 Known gaps in the first build:
 - Android 15 limits `dataSync` foreground services to 6 hours a day; the service stops when that runs out.
@@ -135,6 +138,13 @@ Open questions for the owner (from `docs/PLAN.md`, section F):
 - How is the project paid for?
 
 ## Log
+
+### 2026-10-06
+- First run on a real phone (OnePlus 8T, Android 14, over USB debugging) against Windows 1.2.1.
+- Fixed: every incoming connection was reset. Android's TLS has no `createSocket(socket, consumed, autoClose)`, so the first byte is now peeked with `MSG_PEEK` (`transfer/SocketPeek.kt`).
+- Fixed: Android 14 reported the PC as lost every minute or two while it was still running. A lost device is now asked for `/info` and kept if it answers.
+- Fixed: after many connections, a restarted app moved from port 47820 to 47821. `SO_REUSEADDR` is now on, except on Windows.
+- Tested: PC to phone (4 files, a sub-folder, 50 MB; hashes match), phone to PC (text, and a 50 MB file; hash matches), the Accept button in the notification, numbered names when a file already exists, and the full conformance suite against the phone.
 
 ### 2026-10-05 (later)
 - Gradle project (Gradle 9.8, AGP 9.4.1, Kotlin 2.4.20, Compose BOM 2026.09.00) with `core-protocol`, `core-net`, `core-store`, `core-link`, `transfer`, `ui-mobile` and `app`.
