@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.khanlabs.lanshare.transfer.Engine
 
 /** The app is free with no ads, tracking or account. Support is optional and goes through the website, so the app
  *  itself never talks to a payment service or the internet. Same links as the Windows app (brand.py). */
@@ -72,6 +73,12 @@ fun AboutScreen(onBack: () -> Unit) {
             PROMISES.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
             Spacer(Modifier.height(4.dp))
             Muted("Files go straight from one device to the other on your Wi-Fi. Nothing is sent to KhanLabs or anyone else.")
+            Spacer(Modifier.height(16.dp))
+            Text("Something not working?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Muted("Copy a short report to paste into a message to the developer. Nothing is sent anywhere. It has the app version, your phone model, device names and the latest errors, so read it first.")
+            OutlinedButton(onClick = { copyText(context, Engine.errorReport(), "Copied. Read it before you send it.") }) {
+                Text("Copy error report")
+            }
             Spacer(Modifier.height(16.dp))
             SupportCard(context)
         }

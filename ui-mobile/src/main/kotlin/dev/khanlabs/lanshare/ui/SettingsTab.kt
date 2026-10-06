@@ -83,6 +83,18 @@ internal fun SettingsTab(
         }
         item {
             Card {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Allow VPN addresses", style = MaterialTheme.typography.titleMedium)
+                        Muted("Turn this on only if you reach your devices through a VPN such as Tailscale. Amanah then also connects to addresses from 100.64.0.0 to 100.127.255.255. Off, it connects only to this Wi-Fi network.")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = s.allowVpn, onCheckedChange = { Engine.setAllowVpn(it) })
+                }
+            }
+        }
+        item {
+            Card {
                 Column(Modifier.padding(16.dp)) {
                     Text("Activity", style = MaterialTheme.typography.titleMedium)
                     Muted("The list of what you sent and received is kept on this phone only.")

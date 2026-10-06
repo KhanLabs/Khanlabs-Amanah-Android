@@ -18,6 +18,8 @@ import dev.khanlabs.lanshare.net.ChatMessage
 import dev.khanlabs.lanshare.net.ChatStore
 import dev.khanlabs.lanshare.net.Clients
 import dev.khanlabs.lanshare.net.Device
+import dev.khanlabs.lanshare.net.ErrorLog
+import dev.khanlabs.lanshare.net.ErrorReport
 import dev.khanlabs.lanshare.net.Errors
 import dev.khanlabs.lanshare.net.Identity
 import dev.khanlabs.lanshare.net.IncomingFile
@@ -131,6 +133,8 @@ data class UiState(
     val share: ShareView? = null,
     /** The Wi-Fi network this phone made or joined because there was no router. */
     val ownWifi: OwnWifiView = OwnWifiView(),
+    /** The Settings switch: also connect to the addresses VPNs hand out (100.64.0.0/10). */
+    val allowVpn: Boolean = false,
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
@@ -149,7 +153,7 @@ object Engine : ReceiverEvents {
     var appLabel = "Amanah Android"
         private set
     private var debugBuild = false
-    private val clients = Clients()
+    private val clients = Clients(allowVpn = { prefs.getBoolean("allow_vpn", false) })
     private val io = Executors.newCachedThreadPool { r -> Thread(r, "klshare-io").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
     private val lock = Any()
@@ -178,6 +182,7 @@ object Engine : ReceiverEvents {
     // no_backup, like the identity: a restore on another phone must not bring this phone's activity along
     private val history by lazy { History(File(app.noBackupFilesDir, "history.json")) }
     private val chats by lazy { ChatStore(File(app.noBackupFilesDir, "chats.jsonl")) }
+    private val errors by lazy { ErrorLog(File(app.noBackupFilesDir, "errors.log")) }
     /** The conversation on screen right now, so a text for it doesn't also raise a notification. */
     @Volatile private var viewing: String? = null
 
@@ -205,6 +210,14 @@ object Engine : ReceiverEvents {
 
     val name: String get() = prefs.getString("name", null)?.takeIf { it.isNotBlank() } ?: defaultName()
     val receiving: Boolean get() = prefs.getBoolean("receiving", true)
+
+    /** Whether the range VPNs hand out (100.64.0.0/10) counts as the local network. Off unless the person turns it on. */
+    val allowVpn: Boolean get() = prefs.getBoolean("allow_vpn", false)
+
+    fun setAllowVpn(on: Boolean) {
+        prefs.edit().putBoolean("allow_vpn", on).apply()
+        refresh()
+    }
 
     private fun defaultName(): String {
         val set = if (Build.VERSION.SDK_INT >= 25) Settings.Global.getString(app.contentResolver, Settings.Global.DEVICE_NAME) else null
@@ -456,7 +469,10 @@ object Engine : ReceiverEvents {
             when (j.state) {
                 SendJob.State.DONE -> chats.setState(m.id, "done")
                 SendJob.State.DECLINED -> chats.setState(m.id, "declined", j.message)
-                SendJob.State.FAILED, SendJob.State.CANCELLED -> chats.setState(m.id, "failed", j.message)
+                SendJob.State.FAILED, SendJob.State.CANCELLED -> {
+                    chats.setState(m.id, "failed", j.message)
+                    if (j.state == SendJob.State.FAILED) logFailure("message to ${device.name}", j)
+                }
                 else -> {}
             }
             refresh()
@@ -488,9 +504,34 @@ object Engine : ReceiverEvents {
             SendJob.State.CANCELLED -> "cancelled"
             else -> return
         }
+        if (state == "failed") logFailure("send to ${job.device.name}", job)
         history.add(HistoryEntry("out:${job.offerId}", false, job.device.name, state, job.items.size,
             if (state == "done") job.total else job.sent, System.currentTimeMillis(),
             job.items.take(History.MAX_NAMES).map { it.name }, job.text, if (state == "failed") job.message else ""))
+    }
+
+    private fun logFailure(what: String, job: SendJob) {
+        val cause = job.failure?.let { " [${it.javaClass.simpleName}: ${it.message}]" }.orEmpty()
+        errors.add("$what failed: ${job.message}$cause")
+    }
+
+    /**
+     * The text behind "Copy error report". Nothing is sent anywhere: the screen puts it on the clipboard. It has device
+     * names and may have file names, so the screen tells the person to read it first.
+     */
+    fun errorReport(): String {
+        val s = _state.value
+        val facts = listOf(
+            "Receiving" to (if (s.receiving) "on" else "off") + (s.port?.let { ", port $it" } ?: "") +
+                (s.listenError?.let { ", problem: $it" } ?: ""),
+            "Addresses on this phone" to s.addresses.size.toString(),
+            "Devices seen now" to "${s.nearby.size} nearby, ${s.added.size} added by address",
+            "Share to anyone" to (if (s.share != null) "on" else "off"),
+            "Own Wi-Fi network" to (if (s.ownWifi.hosting) "made by this phone" else "off"),
+            "VPN addresses allowed" to (if (allowVpn) "yes" else "no"),
+        )
+        val system = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}"
+        return ErrorReport.build(appLabel, system, facts, errors.tail(ErrorReport.LOG_LINES))
     }
 
     fun removeHistory(id: String) {
@@ -551,6 +592,7 @@ object Engine : ReceiverEvents {
                     error = Errors.addByIp(host, first ?: e)
                 }
             }
+            error?.let { errors.add("add by address $host failed: $it" + (first?.let { f -> " [${f.javaClass.simpleName}: ${f.message}]" } ?: "")) }
             refresh()
             main.post { onResult(error) }
         }
@@ -831,6 +873,7 @@ object Engine : ReceiverEvents {
                 messages = chats.all,
                 share = shareView(),
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
+                allowVpn = allowVpn,
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
                 debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )

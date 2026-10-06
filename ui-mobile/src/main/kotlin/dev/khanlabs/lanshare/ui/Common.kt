@@ -81,10 +81,10 @@ internal fun whenText(context: Context, millis: Long): String {
     }
 }
 
-internal fun copyText(context: Context, text: String) {
+internal fun copyText(context: Context, text: String, message: String = "Copied") {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("Received text", text))
-    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, message, if (message.length > 20) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
 }
 
 /** "1:52" for 112 seconds. */
