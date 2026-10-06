@@ -435,6 +435,39 @@ Durations are rough, for one experienced developer per app. **M** = must-have, *
 - battery use per GB is recorded;
 - the conformance suite passes in both roles.
 
+### Share to anyone (Windows 1.3 and the phone app, about 1 to 2 weeks)
+
+The other person does not need the app. Only a camera and a browser.
+
+**How it works**
+1. Person A picks files or a folder and taps **Share to anyone**.
+2. A's screen shows the device name, the number of files, the total size, a QR code, and the link as text.
+3. Person B scans the QR code. The browser opens a page served by A's device over the same Wi-Fi.
+4. The page shows A's name, the count and size, a **Download all** button (one .zip), and the files grouped as Photos, Videos, Music, Documents and Other, with photo thumbnails.
+5. The share ends when A closes the screen, or after a time limit A picks. After that the link says "This share has ended".
+
+**Rules**
+- **Local only:** nothing goes through the internet, and there is no account.
+- **A secret link:** the link has 16 random bytes in it, so other people on the Wi-Fi can't guess it. An optional 6-digit PIN, as in today's folder share.
+- **Read-only:** B can only download what A picked.
+- **Download all:** a .zip built while it is sent (stored, not compressed, ZIP64), so it needs no temp space. Its size isn't known in advance.
+- **Single files:** support Range requests, so videos play in the browser and broken downloads can continue.
+- **Plain HTTP on its own port, not HTTPS.** A browser only trusts certificates from a public certificate authority, and those are only given for internet domain names, never for an address like 192.168.1.20. With our own certificate, every browser shows a full-page "Your connection is not private" warning, which is worse than the HTTP warnings below. The only way around it is a KhanLabs internet service that hands out certificates (what Plex does), which breaks the promise that nothing leaves the network. App-to-app transfers stay encrypted as before.
+- **Phone:** reuses the HTTP server in `core-net`, makes the QR code with ZXing (core only, no Play Services), and runs a foreground service while sharing.
+- **Later, with direct mode (Phase 4):** a first QR code joins A's hotspot and a second opens the page, so it works without a router.
+
+**Browser check (2026-10-06, prototype on a PC, opened on a OnePlus 8T)**
+- **Firefox:** the page and the download open with no warning.
+- **Brave:** a full-page "doesn't support a secure connection" warning (tap "Continue to site"), then "File can't be downloaded securely" (tap "Keep"). The 59 MB zip then downloaded fine.
+- **Chrome and Safari:** not tested yet. Chrome 147 and later is reported to skip its HTTPS-First page warning for private IP addresses; its download warning is unverified.
+- So the sender's screen says: "If the browser warns, tap Continue or Keep. The files come straight from this device."
+
+**Done when**
+- the page, Download all and single files work in Chrome, Safari on iPhone, Firefox, Samsung Internet and Brave;
+- a 5 GB share downloads as one zip on a phone and on a PC, and every file matches;
+- a wrong or old link shows "This share has ended";
+- closing the share cuts off downloads that are still running.
+
 ### Phase 3: Android TV (4 to 6 weeks)
 
 **M**

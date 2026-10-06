@@ -39,6 +39,12 @@ Sending and receiving:
 - [ ] User-initiated jobs (API 34+) or a foreground service; wake lock and `WifiLock` (foreground service and locks done; user-initiated jobs not started)
 - [ ] Progress with speed and time remaining; history; text messages (all but history done)
 
+Share to anyone (`docs/PLAN.md`, "Share to anyone"):
+- [ ] Pick files, then a screen with the device name, count, size, QR code and link
+- [ ] Browser page: Download all (.zip made while sending), files grouped by type, photo thumbnails
+- [ ] Secret link, optional PIN, the share ends when the screen closes or after a time limit
+- [ ] Works in Chrome, Safari on iPhone, Firefox, Samsung Internet and Brave
+
 Nice to have:
 - [ ] Clipboard push to trusted devices
 - [ ] Choose which files to accept
@@ -123,6 +129,8 @@ Done when:
 | 2026-10-05 | Read the peer's certificate from the TLS socket, not from OkHttp's `handshake` | OkHttp leaves `peerCertificates` empty for self-signed certificates |
 | 2026-10-06 | Peek the first byte with `MSG_PEEK` on Android | Android's TLS can't take back bytes that were already read, and plain HTTP must still get a 301 |
 | 2026-10-06 | Ask a "lost" device for `/info` before removing it | Android 14 reports services as lost while they are still there |
+| 2026-10-06 | Add "Share to anyone" (QR code to a browser page) | The other person needs no app; the owner wants it as a main feature |
+| 2026-10-06 | "Share to anyone" uses plain HTTP with a secret link, not HTTPS | Browsers don't trust our own certificates and show a worse warning; real certificates need an internet service |
 
 Known gaps in the first build:
 - Android 15 limits `dataSync` foreground services to 6 hours a day; the service stops when that runs out.
