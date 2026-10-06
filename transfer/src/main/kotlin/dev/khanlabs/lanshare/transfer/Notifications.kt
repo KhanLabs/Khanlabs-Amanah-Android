@@ -173,6 +173,33 @@ object Notifications {
         NotificationManagerCompat.from(context).cancel(offerTag(offerId), 0)
     }
 
+    private const val PAUSED_TAG = "paused"
+
+    /**
+     * Shown when Android's daily limit for this kind of background service ends the service (Android 15 and newer).
+     * Android allows no restart from the background, so the way back is to open the app; the notification says so.
+     */
+    fun paused(context: Context) {
+        if (!allowed(context)) return
+        val text = "Paused by Android's background limit. Open Amanah to start receiving again."
+        val b = NotificationCompat.Builder(context, CHANNEL_DONE)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("Receiving paused")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+        try {
+            NotificationManagerCompat.from(context).notify(PAUSED_TAG, 0, b.build())
+        } catch (e: SecurityException) {
+            // notifications were turned off in the meantime
+        }
+    }
+
+    fun cancelPaused(context: Context) {
+        NotificationManagerCompat.from(context).cancel(PAUSED_TAG, 0)
+    }
+
     fun received(context: Context, v: IncomingView) {
         if (!allowed(context)) return
         val title = when {

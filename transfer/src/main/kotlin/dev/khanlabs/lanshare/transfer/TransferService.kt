@@ -33,6 +33,7 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        Notifications.cancelPaused(this)
         goForeground("Starting")
         if (!Engine.needsService) return stopSelf() // restarted by Android with nothing to do
         Thread { Engine.startReceiving() }.start()
@@ -73,8 +74,12 @@ class TransferService : Service() {
         return START_STICKY
     }
 
-    /** Android 15 limits dataSync services to 6 hours a day. */
+    /**
+     * Android 15 limits dataSync services to 6 hours a day. The service must stop within seconds, so it says why and
+     * stops; the timer starts again when the person opens the app.
+     */
     override fun onTimeout(startId: Int, fgsType: Int) {
+        Notifications.paused(this)
         stopSelf()
     }
 
