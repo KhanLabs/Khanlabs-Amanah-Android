@@ -84,6 +84,7 @@ private fun HistoryCard(e: HistoryEntry) {
                 Spacer(Modifier.height(8.dp))
                 for (n in e.names.take(8)) Text(n, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (e.files > 8) Muted("and ${e.files - 8} more")
+                if (e.incoming && e.names.size == e.files) Thumbnails(e.names)
                 if (e.text.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text(e.text, style = MaterialTheme.typography.bodyLarge, maxLines = 12, overflow = TextOverflow.Ellipsis)
