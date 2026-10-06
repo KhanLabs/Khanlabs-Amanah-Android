@@ -324,7 +324,10 @@ class HttpsServer(
             for (p in firstPort until firstPort + maxOf(1, tries)) {
                 val s = ServerSocket()
                 try {
-                    s.reuseAddress = false // never share a port that another app has
+                    // On Linux and Android this only lets the port be taken again while closed connections wait
+                    // in TIME_WAIT, so a restarted app keeps its port. On Windows it would let two programs share
+                    // a port, so there it stays off.
+                    s.reuseAddress = !System.getProperty("os.name", "").startsWith("Windows")
                     s.bind(InetSocketAddress(host, p), 50)
                     return s
                 } catch (e: IOException) {
