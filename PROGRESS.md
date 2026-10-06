@@ -1,15 +1,16 @@
 # Progress: KhanLabs LAN Share (Android)
 
 Update this file at the end of every work session. Newest entries at the top of "Log".
-The plan these phases come from is `docs/PLAN.md` (section D).
+The plan is `docs/PLAN.md` (rewritten 2026-10-06). It puts reliability first: phases R1 to R5 (test lab, v1 fixes, protocol v2, hardening) come before the features in R6 to R10. The older "Phase" names below map to it roughly as Phase 0 and 1 = R2 and R3, Phase 2 = R4 and R6, Phase 3 = R8, Phase 4 = R9, Phase 5 = R5 and R10.
 
-## Where things stand (2026-10-05)
+## Where things stand (2026-10-06)
 
 - **State:** the first phone build (0.1.0, debug) works on a OnePlus 8T (Android 14) with Windows 1.2.1: files, folders and text both ways, found automatically, Accept from the notification while the app is in the background.
 - **Windows app:** 1.2.1 has the Phase 0 fixes. The v2 spec, test vectors and conformance runner are written.
 - **Tested on the PC:** the Kotlin receiver passes the Windows repo's conformance suite (36 fast and 2 slow cases). Files and folders go both ways between the Kotlin code and the Windows 1.2.1 code, and the hashes match.
 - **Tested on the phone:** the Windows conformance suite passes against the phone over Wi-Fi (38 of 38, slow tests included).
-- **Next:** a long transfer with the screen off, and a send picked from the file picker with many files.
+- **Done 2026-10-06:** 1 GB with the screen off in deep Doze, and 2,000 files with hard names (see the Log).
+- **Next:** R1 (test lab and CI), then R2 (v1 reliability, discovery and clear errors).
 
 ## Phase 2: phone app
 
@@ -39,7 +40,7 @@ Sending and receiving:
 - [ ] User-initiated jobs (API 34+) or a foreground service; wake lock and `WifiLock` (foreground service and locks done; user-initiated jobs not started)
 - [ ] Progress with speed and time remaining; history; text messages (all but history done)
 
-Share to anyone (`docs/PLAN.md`, "Share to anyone"):
+Share to anyone (`docs/PLAN.md`, section 5.8; moved to R7, after the first public release):
 - [ ] Pick files, then a screen with the device name, count, size, QR code and link
 - [ ] Browser page: Download all (.zip made while sending), files grouped by type, photo thumbnails
 - [ ] Secret link, optional PIN, the share ends when the screen closes or after a time limit
@@ -99,7 +100,7 @@ Done when:
 
 - [ ] Release keystore made, with two offline backups and a written plan for keeping them
 - [ ] Signed universal APK on GitHub Releases with SHA-256 checksums
-- [ ] Opt-in update check (works with Obtainium)
+- [ ] A "Check for updates" button that only opens the website (no automatic checks; Obtainium users check by themselves)
 - [ ] User guide, including TV setup
 - [ ] Later: F-Droid or IzzyOnDroid (needs open source), Play Store build, LocalSend receive adapter
 
@@ -139,7 +140,7 @@ Known gaps in the first build:
 - Files shared from other apps are read later, when the send starts; a few apps take back access before then.
 - No protocol v2 yet, so no resume and no device proof.
 
-Open questions for the owner (from `docs/PLAN.md`, section F):
+Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Who builds the Android app, and is there a date?
 - Open source or closed?
 - Play Store, or sideload only?
@@ -150,6 +151,8 @@ Open questions for the owner (from `docs/PLAN.md`, section F):
 ## Log
 
 ### 2026-10-06 (later)
+- Rewrote `docs/PLAN.md` as the complete plan (same file in both repos): reliability first (R1 to R5), then features (R6 to R10), a full testing plan with 17 release gates, the UI plan, and the one-time tip page with crypto. Research behind it: `docs/UI-RESEARCH.md` (Android repo).
+- Decided: tips are one-time only; the app has no payment or crypto code; "Made with ♥ by Khan" shows on every screen; the opt-in update check was removed (the apps never contact the internet).
 - Tough test, PC to phone, 1 GB with the screen off, the battery "unplugged" and deep Doze forced (`dumpsys deviceidle force-idle`): done in 120 s at about 9 MB/s, SHA-256 matches. Passed.
 - Tough test, PC to phone, 2,000 files (64 MB, 0 to 64 KB, 25 nested folders) with names like `café`, `日本語`, emoji, `50% off`, `[brackets]`, 180-character names and leading spaces: first run failed, because the Windows sender sent names the receiver refuses (fixed in the Windows repo). After the fix, all 2,000 arrive with the right paths and hashes. Passed.
 - Measured: small files are slow in v1, about 14 files a second (141 s for those 2,000 files). Batching in v2 (`docs/PLAN.md` B.7) should fix this.
