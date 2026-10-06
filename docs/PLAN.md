@@ -171,13 +171,13 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 19 | Re-announce when the network changes | Partly: built; not tested on a real network change | Partly: not tested | Not started | R1 (test), A: R2 |
 | 20 | Re-check a "lost" device with `/info` before removing it | Done 2026-10-06 (`Discovery.recheck`: every 10 s for 10 minutes) | Done | Not started | Done |
 | 21 | Add a device by IP address | Done | Done | Not started | Done |
-| 22 | Show a QR code to connect (address, port, full ID) | Not started | Not started | Not started | R2; TV R8 |
-| 23 | Scan a QR code to connect (CameraX and ZXing) | n/a | Not started | n/a | R2 |
+| 22 | Show a QR code to connect (address, port, full ID) | Not started | Done 2026-10-06 (Receiving sheet shows the phone's code; tested against the Windows app by link) | Not started | R2; TV R8 |
+| 23 | Scan a QR code to connect (CameraX and ZXing) | n/a | Done 2026-10-06 (scanner screen and camera-app links; a real camera scan is not tried yet) | n/a | R2 |
 | 24 | "Search this network" fallback when multicast is blocked | Done 2026-10-06 (`transfer.scan`; not tried on a real /24 yet) | Done 2026-10-07 (`Scan`, a button in Not showing up?; the scan was run from the PC on the real /24 and found the phone in 2.5 s; the screen is not tried on the phone yet) | Not started | R2 |
 | 25 | "Not showing up?" help | Done 2026-10-06 (`find_ui.py`) | Done 2026-10-07 (six steps, the search button, QR and address; the search part is not tried on the phone yet) | Not started | R2 |
 | 26 | Windows "Public network" check | Done 2026-10-06: start-up check, warning card with Open network settings and Allow anyway | n/a | n/a | R2 |
 | 27 | Firewall warning and Fix button | Partly: built; the UAC path is not tested | n/a | n/a | R1 (test) |
-| 28 | Android 17 local network permission (`ACCESS_LOCAL_NETWORK`) | n/a | Not started | Not started | R2 |
+| 28 | Android 17 local network permission (`ACCESS_LOCAL_NETWORK`) | n/a | Built (asks for the permission on Android 17); not tried on an Android 17 device | Not started | R2 |
 
 ### 3.3 Trust and safety
 
@@ -206,7 +206,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 42 | Own receive folder (`Downloads\KhanLabs`, `Download/KhanLabs`) | Done | Done (MediaStore with `IS_PENDING`) | Not started | Done |
 | 43 | Pick another save folder (SAF on Android) | Done | Not started | Not started | A: R4 |
 | 44 | Background transfers: user-initiated data transfer jobs on Android 14+ | n/a | Partly: `dataSync` foreground service only | Not started | R4 |
-| 45 | Handle Android 15's 6-hour `dataSync` limit cleanly | n/a | Not started (known gap) | Not started | R2 |
+| 45 | Handle Android 15's 6-hour `dataSync` limit cleanly | n/a | Done 2026-10-07 (`onTimeout` posts Receiving paused and stops; not tried on Android 15; no resume list because v1 cannot resume) | Not started | R2 |
 | 46 | Read shared files at the moment they are shared, not later | n/a | Not started (known gap) | n/a | R2 |
 | 47 | Activity / History list | Done | Not started | Not started | A: R6 |
 | 48 | Open, Show in folder and Share after receiving | Done | Not started | Not started | A: R6 |
@@ -216,12 +216,12 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | # | Feature | W | A | TV | Phase |
 |---|---|---|---|---|---|
 | 49 | Android share sheet as a way in | n/a | Done | n/a | Done |
-| 50 | Content-first Send buttons: Files, Photos, Folder, Text | n/a | Not started (device-first works) | n/a | R6 |
-| 51 | Recent devices in the Android share sheet (Sharing Shortcuts) | n/a | Not started | n/a | R6 |
-| 52 | Quick Settings tile for receiving | n/a | Not started | n/a | R6 |
+| 50 | Content-first Send buttons: Files, Photos, Folder, Text | n/a | Done 2026-10-06 (Files, Photos and videos, Folder, Message) | n/a | R6 |
+| 51 | Recent devices in the Android share sheet (Sharing Shortcuts) | n/a | Done 2026-10-06 (up to 4 devices in the Share menu and the app icon menu; tested from Firefox's Share) | n/a | R6 |
+| 52 | Quick Settings tile for receiving | n/a | Done 2026-10-06 (tile tested with `cmd statusbar click-tile`) | n/a | R6 |
 | 53 | Drag and drop onto a device (`tkinterdnd2`) | Done 2026-10-06: onto the Send tab or one card. Not tried with a real drag from Explorer. A frozen test program loads the library | n/a | n/a | R6 |
 | 54 | Explorer "Send to" entry (opt-in) | Done 2026-10-06: Settings checkbox, shortcut, second copy hands the paths over. Not tried by clicking in Explorer | n/a | n/a | R6 |
-| 55 | Phone tabs: Send, Activity, Settings | n/a | Not started | n/a | R6 |
+| 55 | Phone tabs: Send, Activity, Settings | n/a | Done 2026-10-06 (four tabs: Send, Messages, Activity, Settings) | n/a | R6 |
 | 56 | Receiving chip and Receiving sheet | Partly: chip with on or off and Open received files (2026-10-06). No Receiving sheet or policy list | Done 2026-10-06 (Receiving chip and sheet; the policy list is not built) | n/a | R6 |
 | 57 | Windows: four tabs (Send, Share a folder, History, Settings), device cards | Partly: Send tab and device cards done 2026-10-06. Five tabs, because Messages is a tab of its own | n/a | n/a | R6 |
 | 58 | First-run screen | Not started | Not started | Not started | A: R2 (minimal), W: R6, TV: R8 |
@@ -247,7 +247,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 68 | Fix: notepad save accepts requests from other sites (CSRF) | Not started | n/a | n/a | R2 |
 | 69 | Fix: PIN lockout is per IP only; add a cap for all IPs | Not started | n/a | n/a | R2 |
 | 70 | Fix: "Download all" zip has no length, so a cut download can look complete | Done 2026-10-06 (`zipplan.py`, shared with Share to anyone; a test shrinks a file mid-download and the client sees `IncompleteRead`). Not tried: 20 random cuts in real browsers | n/a | n/a | R2 |
-| 71 | Share to anyone: pick files, QR and link screen | Done | Built, not yet run on the phone | Not started | R7; TV later |
+| 71 | Share to anyone: pick files, QR and link screen | Done | Done 2026-10-07 (run on the phone; the time limit ending and a second phone scanning are not tried) | Not started | R7; TV later |
 | 72 | Share to anyone page: grouped files, Download all, Range, PIN, time limit (no thumbnails: the page has no scripts) | Done | Done (tested over sockets) | n/a | R7 |
 | 73 | Web page uploads with v2 chunks (resumable uploads from iPhones) | Not started | n/a | n/a | R10 (nice to have) |
 
