@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +81,7 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
     var pickFor by remember { mutableStateOf<Device?>(null) }
     var addOpen by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
+    var aboutOpen by rememberSaveable { mutableStateOf(false) }
 
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         pickFor?.let { if (uris.isNotEmpty()) send(context, scope, it, uris, "") }
@@ -89,7 +92,13 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
         pickFor = null
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("LAN Share") }) }) { pad ->
+    if (aboutOpen) {
+        BackHandler { aboutOpen = false }
+        AboutScreen(onBack = { aboutOpen = false })
+    } else Scaffold(
+        topBar = { TopAppBar(title = { Text("LAN Share") }, actions = { TextButton(onClick = { aboutOpen = true }) { Text("About") } }) },
+        bottomBar = { MadeWithBar() },
+    ) { pad ->
         LazyColumn(
             modifier = Modifier.padding(pad).fillMaxSize(),
             contentPadding = PaddingValues(16.dp),

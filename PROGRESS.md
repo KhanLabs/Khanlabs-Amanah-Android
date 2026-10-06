@@ -131,6 +131,8 @@ Done when:
 | 2026-10-06 | Ask a "lost" device for `/info` before removing it | Android 14 reports services as lost while they are still there |
 | 2026-10-06 | Add "Share to anyone" (QR code to a browser page) | The other person needs no app; the owner wants it as a main feature |
 | 2026-10-06 | "Share to anyone" uses plain HTTP with a secret link, not HTTPS | Browsers don't trust our own certificates and show a worse warning; real certificates need an internet service |
+| 2026-10-06 | 100% free: no ads, subscriptions, limits, account or data collection. Optional support buttons ($2, $5, $10, $25, Custom) in About open `khanlabs.dev/support` in the browser | The promise is the product; the app has no payment code and never contacts the internet itself. Never nag |
+| 2026-10-06 | "Made with ♥ by Khan" always shows at the bottom: Windows footer, every phone screen, every served web page | The owner's request; part of the brand |
 
 Known gaps in the first build:
 - Android 15 limits `dataSync` foreground services to 6 hours a day; the service stops when that runs out.
@@ -143,9 +145,14 @@ Open questions for the owner (from `docs/PLAN.md`, section F):
 - Play Store, or sideload only?
 - iOS or macOS, ever?
 - Is the name final?
-- How is the project paid for?
+- Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-06 (later)
+- About screen (top bar): version, "Built for people, not advertisers", the five promises, and the optional Support buttons. Tested on the OnePlus: $5 opens `khanlabs.dev/support?amount=5` in the browser.
+- "Made with ♥ by Khan" bar pinned to the bottom of every screen.
+- UI and privacy research saved as `docs/UI-RESEARCH.md`.
 
 ### 2026-10-06
 - First run on a real phone (OnePlus 8T, Android 14, over USB debugging) against Windows 1.2.1.
