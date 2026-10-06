@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -265,6 +266,11 @@ internal fun statusLine(s: UiState): String = when {
 
 @Composable
 internal fun HelpSheet(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, onDismiss: () -> Unit) {
+    var searching by remember { mutableStateOf(false) }
+    var checked by remember { mutableStateOf(0 to 0) }
+    var outcome by remember { mutableStateOf<String?>(null) }
+    // closing the sheet ends a search that is still running
+    DisposableEffect(Unit) { onDispose { Engine.stopSearch() } }
     Sheet(onDismiss) {
         Text("Not showing up?", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
@@ -274,7 +280,9 @@ internal fun HelpSheet(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, on
             "Settings, Network and internet, Wi-Fi, your network, then Private network. Allow Amanah if Windows asks.")
         Step("4", "Still nothing? Scan its QR code",
             "Open Amanah on the other device and show its QR code. Scan it here. This works whenever both devices can reach each other.")
-        Step("5", "No camera? Use the address",
+        Step("5", "Or search this network",
+            "Some routers and guest networks block the announcements. This asks the addresses near this phone's own, one by one. It takes about 10 seconds and only runs when you tap the button.")
+        Step("6", "No camera? Use the address",
             "The other device shows its address, like 192.168.1.20. Type it with Add by IP.")
         if (s.receiving && s.port != null && s.addresses.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
@@ -282,6 +290,33 @@ internal fun HelpSheet(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, on
         }
         Spacer(Modifier.height(12.dp))
         Button(onClick = onScan, Modifier.fillMaxWidth()) { Text("Scan QR code") }
+        if (searching) {
+            val (done, total) = checked
+            LinearProgressIndicator(
+                progress = { if (total == 0) 0f else done.toFloat() / total },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            )
+            Muted(if (total == 0) "Starting the search" else "Checked $done of $total addresses")
+            OutlinedButton(onClick = { Engine.stopSearch() }, Modifier.fillMaxWidth()) { Text("Stop searching") }
+        } else {
+            OutlinedButton(onClick = {
+                outcome = null
+                checked = 0 to 0
+                searching = true
+                Engine.searchNetwork(
+                    onProgress = { done, total -> checked = done to total },
+                    onDone = { found, error ->
+                        searching = false
+                        outcome = error ?: when (found.size) {
+                            0 -> "No Amanah device answered. Check steps 1 to 3, or scan its QR code."
+                            1 -> "Found ${found[0].name}. It is on the Send tab now."
+                            else -> "Found ${found.size} devices: ${found.joinToString { it.name }}. They are on the Send tab now."
+                        }
+                    },
+                )
+            }, Modifier.fillMaxWidth()) { Text("Search this network") }
+        }
+        outcome?.let { Muted(it, modifier = Modifier.padding(vertical = 4.dp)) }
         OutlinedButton(onClick = onAddByIp, Modifier.fillMaxWidth()) { Text("Add by IP address") }
     }
 }

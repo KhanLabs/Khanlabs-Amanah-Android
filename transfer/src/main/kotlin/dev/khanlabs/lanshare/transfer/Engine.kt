@@ -18,6 +18,7 @@ import dev.khanlabs.lanshare.net.ChatMessage
 import dev.khanlabs.lanshare.net.ChatStore
 import dev.khanlabs.lanshare.net.Clients
 import dev.khanlabs.lanshare.net.Device
+import dev.khanlabs.lanshare.net.Errors
 import dev.khanlabs.lanshare.net.Identity
 import dev.khanlabs.lanshare.net.IncomingFile
 import dev.khanlabs.lanshare.net.Me
@@ -25,6 +26,7 @@ import dev.khanlabs.lanshare.net.Offer
 import dev.khanlabs.lanshare.net.Receiver
 import dev.khanlabs.lanshare.net.ReceiverEvents
 import dev.khanlabs.lanshare.net.ReceiverSettings
+import dev.khanlabs.lanshare.net.Scan
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.SendJob
 import dev.khanlabs.lanshare.net.ShareDownload
@@ -48,6 +50,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.io.File
 import java.io.FileInputStream
+import java.io.IOException
 import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
@@ -524,7 +527,8 @@ object Engine : ReceiverEvents {
         val host = address.trim().substringBefore(':')
         val port = address.trim().substringAfter(':', "").toIntOrNull()
         io.execute {
-            var error: String? = "Nothing answered at $host"
+            var error: String? = Errors.addByIp(host, IOException("no answer"))
+            var first: Exception? = null
             val ports = if (port != null) listOf(port) else (V1.DEFAULT_PORT until V1.DEFAULT_PORT + V1.PORT_TRIES).toList()
             for (p in ports) {
                 try {
@@ -542,11 +546,56 @@ object Engine : ReceiverEvents {
                     break
                 } catch (e: Exception) {
                     if (Clients.mismatch(e) != null) { error = e.message; break }
+                    // the first port tried says the most: a later one only says "nothing here"
+                    if (first == null) first = e
+                    error = Errors.addByIp(host, first ?: e)
                 }
             }
             refresh()
             main.post { onResult(error) }
         }
+    }
+
+    @Volatile private var searchStop = false
+
+    /**
+     * "Search this network": asks the addresses near this phone's own whether an Amanah device answers, for networks
+     * where announcements do not get through. Only when the person taps it. Devices found are kept like ones added by
+     * address. Both callbacks run on the main thread; [onDone] gets the devices found (new or already known) or a message.
+     */
+    fun searchNetwork(onProgress: (done: Int, total: Int) -> Unit, onDone: (found: List<Device>, error: String?) -> Unit) {
+        searchStop = false
+        io.execute {
+            val mine = (own.view.addresses + addresses).distinct()
+            val hosts = Scan.hosts(mine)
+            if (hosts.isEmpty()) {
+                main.post { onDone(emptyList(), "This phone isn't on a Wi-Fi network, so there is nothing to search.") }
+                return@execute
+            }
+            var last = 0L
+            val found = Scan.run(clients, mine, identity.id, stop = { searchStop }, progress = { done, total ->
+                val now = System.nanoTime()
+                if (done == total || now - last > 150_000_000L) {
+                    last = now
+                    main.post { onProgress(done, total) }
+                }
+            })
+            if (found.isNotEmpty()) {
+                synchronized(lock) {
+                    for (d in found) {
+                        added.removeAll { it.id == d.id }
+                        added.add(d)
+                    }
+                }
+                saveAdded()
+                refresh()
+            }
+            main.post { onDone(found, null) }
+        }
+    }
+
+    fun stopSearch() {
+        searchStop = true
     }
 
     /**
