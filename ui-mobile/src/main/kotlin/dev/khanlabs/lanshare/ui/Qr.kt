@@ -55,7 +55,7 @@ internal fun QrCode(text: String, modifier: Modifier = Modifier) {
 internal fun QrSheet(code: ConnectCode?, onDismiss: () -> Unit) {
     Sheet(onDismiss) {
         Text("Scan to connect", style = MaterialTheme.typography.titleLarge)
-        Muted("On the other device, open LAN Share and choose Scan QR code. Scanning proves it is this device, not another one with the same name.")
+        Muted("On the other device, open Amanah and choose Scan QR code. Scanning proves it is this device, not another one with the same name.")
         if (code == null) {
             Text("There is no code yet. Connect to Wi-Fi and turn Receiving on.", Modifier.padding(vertical = 24.dp))
         } else {

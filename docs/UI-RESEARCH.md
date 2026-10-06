@@ -1,4 +1,4 @@
-# KhanLabs LAN Share: UI and privacy research
+# Amanah: UI and privacy research
 
 Date: 6 October 2026. Covers Windows 1.2.1 and Android 0.1.0.
 Store numbers (ratings, downloads, "Contains ads", Data safety labels) were read from Google Play on 6 October 2026, US store. Tracker counts come from Exodus Privacy reports; each report's date is given. Numbers in square brackets, like [12], point to the source list in section 9.
@@ -116,7 +116,7 @@ Use a bottom navigation bar with three tabs: **Send**, **Activity**, **Settings*
 
 ```
 +--------------------------------------------+
-| LAN Share                 (o) Receiving  > |  <- chip; tap opens the Receiving sheet
+| Amanah                 (o) Receiving  > |  <- chip; tap opens the Receiving sheet
 +--------------------------------------------+
 | [ Sending 3 files to Khan                ] |  <- only while something is running
 | [ ########----  64%  12 MB/s  8 s  Cancel ] |
@@ -143,7 +143,7 @@ Use a bottom navigation bar with three tabs: **Send**, **Activity**, **Settings*
 - Keep looking for devices the whole time the app is open, whether or not receiving is on. Replace the Refresh button with pull-to-refresh.
 - "Not showing up?" opens a short help sheet:
   1. Check that both devices are on the same Wi-Fi (guest networks often block this).
-  2. On the PC, open LAN Share and allow it through the firewall.
+  2. On the PC, open Amanah and allow it through the firewall.
   3. **Scan the PC's QR code** (main fix).
   4. Add by IP address (fallback).
 
@@ -153,7 +153,7 @@ Support three ways in. Make the first one the main one.
 
 1. **Content first (main).** Tap Files, Photos, Folder or Text. The system picker opens. A bottom sheet then shows "Send 3 files (12 MB) to..." with the device list. Tap a device and sending starts. This matches AirDrop, Quick Share and LocalSend [34][36][38].
 2. **Device first (keep).** Tap a device. A sheet opens: "Send to Khan: Files / Photos and videos / Folder / Text / Paste clipboard".
-3. **From another app's share sheet (already built).** Keep the "Pick a device" banner. Add Android **Sharing Shortcuts** so the two most recent devices appear directly in the system share sheet, for example "Khan (LAN Share)", which saves one more tap [77]. Add a Quick Settings tile later [19].
+3. **From another app's share sheet (already built).** Keep the "Pick a device" banner. Add Android **Sharing Shortcuts** so the two most recent devices appear directly in the system share sheet, for example "Khan (Amanah)", which saves one more tap [77]. Add a Quick Settings tile later [19].
 
 While sending, show progress on the device row itself as well as in the top card, so the person sees where it is going. (AirDrop and Quick Share show a ring around the target; I observed this pattern but have no source to cite here.)
 
@@ -212,7 +212,7 @@ Receiving
  (*) Ask me every time                <- default today
  ( ) Paired devices only              <- after protocol v2
 This phone: OnePlus 8T          [Rename]
-[ QR code ]  Scan this from LAN Share on another device
+[ QR code ]  Scan this from Amanah on another device
 Address 192.168.1.241:47820  -  ID 1520-296C
 Saved to Download/KhanLabs      [Change]
 ```
@@ -231,7 +231,7 @@ Keep it to one screen. NN/g: "Avoid creating app onboarding whenever possible" [
 
 ```
 +--------------------------------------------+
-| KhanLabs LAN Share                         |
+| Amanah                         |
 | Send files to your own devices on this     |
 | Wi-Fi.                                     |
 | No account. No ads. Nothing leaves your    |
@@ -245,13 +245,13 @@ Keep it to one screen. NN/g: "Avoid creating app onboarding whenever possible" [
 ```
 
 When to ask for each permission:
-- **Local network (Android 17 and later):** right after Continue, because nothing works without it. One line first: "Android will ask if LAN Share can find devices on your network. This is how your PC shows up." Apps that target Android 17 and do not hold `ACCESS_LOCAL_NETWORK` have their local-network traffic blocked [75]. It belongs to the Nearby devices group [75].
+- **Local network (Android 17 and later):** right after Continue, because nothing works without it. One line first: "Android will ask if Amanah can find devices on your network. This is how your PC shows up." Apps that target Android 17 and do not hold `ACCESS_LOCAL_NETWORK` have their local-network traffic blocked [75]. It belongs to the Nearby devices group [75].
 - **Notifications (Android 13 and later):** as a card on the Send tab: "Get told when someone sends you something? [Allow] [Not now]".
 - **Camera:** only when the person taps "Scan QR code".
 - **Nearby Wi-Fi devices:** only for direct mode (phone to phone, no router). Declare it with `neverForLocation` so Android knows it is not used for location [76]. On Android 12 and older, Wi-Fi Direct needs Location permission; say plainly that the app does not read your location [76].
 - **Battery optimisation:** only when the person turns on "Keep receiving in the background".
 
-After first run, land on the Send tab. If no devices are found yet, the empty state says: "Open LAN Share on your PC or TV" with a [Scan QR code] button, and "Get it for Windows at khanlabs.dev".
+After first run, land on the Send tab. If no devices are found yet, the empty state says: "Open Amanah on your PC or TV" with a [Scan QR code] button, and "Get it for Windows at khanlabs.dev".
 
 ---
 
@@ -273,7 +273,7 @@ Rename "Devices" to **Send**. Move the shared notepad into the **Share a folder*
 
 ```
 +------------------------------------------------------------------------------+
-| KhanLabs.dev | LAN Share       (o) Receiving: Ask every time v    Khan  194E  |
+| KhanLabs.dev | Amanah       (o) Receiving: Ask every time v    Khan  194E  |
 +------------------------------------------------------------------------------+
 | Send | Share a folder | History | Settings                                   |
 +------------------------------------------------------------------------------+
@@ -303,7 +303,7 @@ Rename "Devices" to **Send**. Move the shared notepad into the **Share a folder*
 ### 5.3 Send flow
 
 - Device first: select a card, then drop or click a send button (today's flow, with drop added).
-- Files first: Explorer, then "Send to", then "KhanLabs LAN Share", then pick the device.
+- Files first: Explorer, then "Send to", then "Amanah", then pick the device.
 - Text: "Send text..." (exists). Add "Send clipboard" to the tray menu.
 
 ### 5.4 Receive flow
@@ -349,7 +349,7 @@ Mostly yes. I checked both repos:
 - Android backup is off (`allowBackup="false"`), so the device key and settings are not copied to a cloud backup.
 
 Three details the wording must respect:
-1. **"Encrypted" holds between LAN Share apps.** On Windows, "Share a folder" can use plain FTP if the user turns it on, and the web page uses a self-signed certificate.
+1. **"Encrypted" holds between Amanah apps.** On Windows, "Share a folder" can use plain FTP if the user turns it on, and the web page uses a self-signed certificate.
 2. **The device name and ID are visible to the network.** While the app is announcing itself, every device on the same Wi-Fi can see its name and ID. Say so.
 3. **Android lists `INTERNET` as "have full network access".** Android has no separate "local network only" permission name for this, so the store text should explain it.
 
@@ -365,7 +365,7 @@ Three details the wording must respect:
 ### 7.3 In-app statement (Settings, Privacy)
 
 > **Your privacy**
-> LAN Share collects no data. It has no ads, no analytics, no crash reports and no account.
+> Amanah collects no data. It has no ads, no analytics, no crash reports and no account.
 > The app only talks to devices on your local network. Files and text go straight from one device to the other over an encrypted connection. They never pass through a server, ours or anyone else's. KhanLabs never sees what you send.
 > While the app is open, other devices on the same Wi-Fi can see this device's name.
 > Your phone or PC maker, and the operating system, may collect data of their own. That is outside this app's control.
@@ -375,7 +375,7 @@ Short line for the first-run screen: **"No account. No ads. Nothing leaves your 
 ### 7.4 Store-page paragraph
 
 > **Private by design**
-> KhanLabs LAN Share has no ads, no analytics, no tracking and no account. We do not collect any data, so there is nothing for us to sell, share or lose. Files and text go directly from your device to the other device on your Wi-Fi, encrypted, and never through the internet or a server. The app contains no advertising, analytics or crash-reporting code. [You can check this in the Exodus Privacy report: link.]
+> Amanah has no ads, no analytics, no tracking and no account. We do not collect any data, so there is nothing for us to sell, share or lose. Files and text go directly from your device to the other device on your Wi-Fi, encrypted, and never through the internet or a server. The app contains no advertising, analytics or crash-reporting code. [You can check this in the Exodus Privacy report: link.]
 >
 > **Why the app asks for permissions**
 > - Network access: Android calls this "full network access". The app uses it only to reach devices on your local network.
@@ -409,7 +409,7 @@ Also:
 
 ### 7.7 Pointing to competitors fairly
 
-- **Use their own published facts, with dates and links:** their Play Data safety wording, Exodus tracker counts with report dates, CVE numbers, government decisions. Example: "Some of the most-installed sharing apps include 5 to 22 advertising and tracking libraries (Exodus Privacy, checked October 2026). LAN Share includes none."
+- **Use their own published facts, with dates and links:** their Play Data safety wording, Exodus tracker counts with report dates, CVE numbers, government decisions. Example: "Some of the most-installed sharing apps include 5 to 22 advertising and tracking libraries (Exodus Privacy, checked October 2026). Amanah includes none."
 - **Keep competitor names out of the Play listing.** Play's metadata rules discourage deceptive claims, ranking claims and unattributed testimonials [86]. Put a dated comparison table on khanlabs.dev instead, and recheck it every 6 months.
 - **Give credit where it is due.** LocalSend, KDE Connect and Warpinator also have zero trackers. Do not claim to be the only private option. Say what is different: Android TV with a remote, resume, keeping folders, sharing a folder to any browser.
 - **Avoid loaded words** like "spyware" or "Chinese apps". State facts such as "banned in India in June 2020" only with the source [12].

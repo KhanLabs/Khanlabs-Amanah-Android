@@ -35,7 +35,7 @@ fun startConformanceReceiver(
 ): Pair<Receiver, ConformanceAnswers> {
     val answers = ConformanceAnswers()
     val rx = Receiver(identity, { ReceiverSettings("Conformance Android", true) }, { FolderStore(inbox) }, answers,
-        app = "KhanLabs LAN Share Android test", port = port, host = host, idleTimeoutMs = idleTimeoutMs,
+        app = "Amanah Android test", port = port, host = host, idleTimeoutMs = idleTimeoutMs,
         offerTimeoutMs = offerTimeoutMs)
     answers.receiver = rx
     rx.start()

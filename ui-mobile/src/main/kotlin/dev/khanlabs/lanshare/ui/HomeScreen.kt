@@ -200,14 +200,14 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
     fun scanned(text: String) {
         scanOpen = false
         val code = ConnectCode.parse(text)
-        if (code == null) connectMsg = "That QR code is not from LAN Share." else connect(code)
+        if (code == null) connectMsg = "That QR code is not from Amanah." else connect(code)
     }
 
     // a connect link opened from the phone's camera app: ask before adding anything
     LaunchedEffect(link) {
         if (link.isNotEmpty()) {
             val code = ConnectCode.parse(link)
-            if (code == null) connectMsg = "That link is not a LAN Share connect code." else linkCode = code
+            if (code == null) connectMsg = "That link is not an Amanah connect code." else linkCode = code
             onLinkHandled()
         }
     }
@@ -224,7 +224,7 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("LAN Share", fontFamily = FontFamily.Serif, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = { Text("Amanah", fontFamily = FontFamily.Serif, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = { ReceivingChip(s) { receivingOpen = true }; Spacer(Modifier.width(12.dp)) },
                 )
             },

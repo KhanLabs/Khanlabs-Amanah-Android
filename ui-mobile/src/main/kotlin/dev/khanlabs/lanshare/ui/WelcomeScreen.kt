@@ -45,7 +45,10 @@ fun WelcomeScreen(permissionNote: String, onContinue: () -> Unit) {
                 Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                Text("LAN Share", fontFamily = FontFamily.Serif, fontSize = 40.sp, color = MaterialTheme.colorScheme.onBackground)
+                Column {
+                    Text("Amanah", fontFamily = FontFamily.Serif, fontSize = 40.sp, color = MaterialTheme.colorScheme.onBackground)
+                    Muted("File sharing by KhanLabs")
+                }
                 Text("Send files and text between your phone and your computer, over your own Wi-Fi.",
                     style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))

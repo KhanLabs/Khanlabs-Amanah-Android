@@ -1,4 +1,4 @@
-# KhanLabs LAN Share: the complete plan
+# Amanah: the complete plan
 
 | | |
 |---|---|
@@ -21,7 +21,7 @@
 
 ## 1. Summary
 
-**What it is.** KhanLabs LAN Share moves files and text between your own devices. It works on the same Wi-Fi today, and later with no router at all. There is a Windows app and an Android app. An Android TV version comes later. "Share to anyone" will let a person with no app download files in their browser by scanning a QR code.
+**What it is.** Amanah moves files and text between your own devices. It works on the same Wi-Fi today, and later with no router at all. There is a Windows app and an Android app. An Android TV version comes later. "Share to anyone" will let a person with no app download files in their browser by scanning a QR code.
 
 **Who it is for**
 1. People who move large files and folders between a phone and a PC.
@@ -107,7 +107,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 ### 2.4 Brand
 | Item | Rule |
 |---|---|
-| Name | KhanLabs LAN Share. Wordmark in Georgia. Body text in Segoe UI on Windows, the system font elsewhere. |
+| Name | Amanah. Wordmark in Georgia. Body text in Segoe UI on Windows, the system font elsewhere. |
 | Colors | The current scheme everywhere (section 4.1). No new accent colors. |
 | Brand line | "Built for people, not advertisers. No ads. No tracking. No accounts. No cloud required. Free forever." |
 | Footer | "Made with ♥ by Khan" at the bottom of every screen. The heart is red #FF5F57, drawn as an icon or a text glyph, never an emoji. Screen readers read "Made with love by Khan". |
@@ -321,7 +321,7 @@ Text on a teal button uses paper #080A0E (10.64:1). White on teal is 1.86:1 and 
 
 | Platform | Where | Content | Status |
 |---|---|---|---|
-| Windows | Bottom bar of the main window and of the About window | "KhanLabs LAN Share v1.2.1 \| Made with ♥ by Khan \| About \| khanlabs.dev" | Done. Fix: text color faint to muted. |
+| Windows | Bottom bar of the main window and of the About window | "Amanah v1.2.1 \| Made with ♥ by Khan \| About \| khanlabs.dev" | Done. Fix: text color faint to muted. |
 | Phone | A bar below every screen, above the system navigation bar | "Made with ♥ by Khan". Tapping it opens About. | Built (commit 6d37632). Needs the tests below. |
 | Folder share page | Pinned to the bottom of the page | Version, "Made with ♥ by Khan", khanlabs.dev link | Done (commit 70cb613). Fix the light theme. |
 | Share to anyone page | Pinned to the bottom of the page | "Made with ♥ by Khan" and "Sent straight from Khan's PC over this Wi-Fi. Nothing is uploaded." | R7 |
@@ -341,7 +341,7 @@ Text on a teal button uses paper #080A0E (10.64:1). White on teal is 1.86:1 and 
 **Main screen (Send tab)**
 ```
 +--------------------------------------------+
-| LAN Share                 (o) Receiving  > |  chip: opens the Receiving sheet
+| Amanah                 (o) Receiving  > |  chip: opens the Receiving sheet
 +--------------------------------------------+
 | [ Sending 3 files to Khan                ] |  only while something runs
 | [ ########----  64%  12 MB/s  8 s  Cancel ] |
@@ -362,7 +362,7 @@ Text on a teal button uses paper #080A0E (10.64:1). White on teal is 1.86:1 and 
 1. Device rows show an icon, the name, a readable type and a badge: **Paired** (after QR pairing) or **New**. The IP and ID move to a long-press "Details" sheet.
 2. The app looks for devices the whole time it is open, whether receiving is on or not. Pull down to refresh.
 3. Conformance mode moves to Settings, Developer, in debug builds only.
-4. Empty state: "Open LAN Share on your PC or TV" with [Scan QR code], and "Get it for Windows at khanlabs.dev".
+4. Empty state: "Open Amanah on your PC or TV" with [Scan QR code], and "Get it for Windows at khanlabs.dev".
 
 **Send flow (content first)**
 1. Tap Files, Photos, Folder or Text. The system picker opens.
@@ -397,7 +397,7 @@ Receiving
  (*) Ask me every time
  ( ) Paired devices only            after protocol v2
 This phone: OnePlus 8T                 [Rename]
-[ QR code ]  Scan this from LAN Share on another device
+[ QR code ]  Scan this from Amanah on another device
 Address 192.168.1.241:47820  -  ID 1520-296C
 Saved to Download/KhanLabs             [Change]
 ```
@@ -414,7 +414,7 @@ Saved to Download/KhanLabs             [Change]
 
 **"Not showing up?" sheet**
 1. Check that both devices are on the same Wi-Fi. Guest networks often block this.
-2. On the PC, open LAN Share and allow it through the firewall.
+2. On the PC, open Amanah and allow it through the firewall.
 3. **Scan the PC's QR code.** This always works when both devices are on the same network.
 4. Search this network (the fallback scan).
 5. Add by IP address.
@@ -422,7 +422,7 @@ Saved to Download/KhanLabs             [Change]
 **First run** (one screen)
 ```
 +--------------------------------------------+
-| KhanLabs LAN Share                         |
+| Amanah                         |
 | Send files to your own devices on this     |
 | Wi-Fi.                                     |
 | No account. No ads. Nothing leaves your    |
@@ -441,7 +441,7 @@ Permissions are asked when first needed, each with one line of reason:
 
 | Permission | When | Line shown first |
 |---|---|---|
-| Local network (Android 17+, when the app targets API 37) | Right after Continue | "Android will ask if LAN Share can find devices on your network. This is how your PC shows up." |
+| Local network (Android 17+, when the app targets API 37) | Right after Continue | "Android will ask if Amanah can find devices on your network. This is how your PC shows up." |
 | Notifications (Android 13+) | A card on the Send tab | "Get told when someone sends you something?" |
 | Camera | When the user taps Scan QR code | "The camera is used only to read the QR code. No photos are taken." |
 | Nearby Wi-Fi devices | Only for direct mode (R9) | "Needed to connect two phones without a router. Not used to find your location." |
@@ -470,7 +470,7 @@ The app stays usable if the person says no. Each refusal shows what still works.
 **Main window: four tabs** (Send, Share a folder, History, Settings). The notepad moves into Share a folder, because it belongs to the web page.
 ```
 +------------------------------------------------------------------------+
-| KhanLabs.dev | LAN Share     (o) Receiving: Ask every time v   Khan 194E |
+| KhanLabs.dev | Amanah     (o) Receiving: Ask every time v   Khan 194E |
 +------------------------------------------------------------------------+
 | Send | Share a folder | History | Settings                             |
 +------------------------------------------------------------------------+
@@ -486,7 +486,7 @@ The app stays usable if the person says no. Each refusal shows what still works.
 | Transfers                                            [Clear finished]  |
 |  ^ To OnePlus 8T  video.mp4  ######--- 71%  38 MB/s  12 s   [Cancel]   |
 +------------------------------------------------------------------------+
-| KhanLabs LAN Share v1.3 | Made with ♥ by Khan | About | khanlabs.dev   |
+| Amanah v1.3 | Made with ♥ by Khan | About | khanlabs.dev   |
 +------------------------------------------------------------------------+
 ```
 1. Device cards with icon, name, type and a Paired or New badge. The selected card has a teal border. Address and ID show on hover and in a right-click "Details".
@@ -547,7 +547,7 @@ Same content on phone, Windows and TV (TV has no tip card, because opening a bro
 
 ```
 About
-KhanLabs LAN Share
+Amanah
 Version 1.3.0
 Built for people, not advertisers.
   - No ads.
@@ -577,7 +577,7 @@ Website: khanlabs.dev       Open-source licences
 |---|---|
 | Unpaired sender | "New device. ID 194E-0972." with the (i) help |
 | Paired sender | "Paired" with a check mark |
-| Privacy (Settings) | "LAN Share collects no data. It has no ads, no analytics, no crash reports and no account. The app only talks to devices on your local network. Files and text go straight from one device to the other over an encrypted connection. They never pass through a server, ours or anyone else's. While the app is open, other devices on the same Wi-Fi can see this device's name." |
+| Privacy (Settings) | "Amanah collects no data. It has no ads, no analytics, no crash reports and no account. The app only talks to devices on your local network. Files and text go straight from one device to the other over an encrypted connection. They never pass through a server, ours or anyone else's. While the app is open, other devices on the same Wi-Fi can see this device's name." |
 | Older peer | "Khan's PC runs an older version. This send works, but it cannot resume if it is cut off." |
 | Transfer stopped | Always three parts: what happened, whether anything was lost, what to do. Example: "Stopped: the Wi-Fi connection dropped. 2 of 5 files were saved and checked. The rest will continue when both devices are back on the same Wi-Fi." |
 | Never use | "not verified", "Oops", "Uh oh", "Something went wrong" with no detail, stack traces |
@@ -678,7 +678,7 @@ Base path `/api/kl/v1`, HTTPS, the server certificate pinned by device ID.
 
 ### 5.5 Android: background work, storage and permissions
 1. **Background transfers:** on Android 14 and later, user-started transfers run as user-initiated data transfer jobs. On older versions, a `dataSync` foreground service.
-2. **The 6-hour limit:** on Android 15 and later, `dataSync` services may run 6 hours in 24, then `Service.onTimeout()` is called. The timer resets when the app comes to the foreground ([FGS timeout](https://developer.android.com/develop/background-work/services/fgs/timeout)). The app must stop within seconds, save the journal, and post "Paused by Android's background limit. Open LAN Share to continue."
+2. **The 6-hour limit:** on Android 15 and later, `dataSync` services may run 6 hours in 24, then `Service.onTimeout()` is called. The timer resets when the app comes to the foreground ([FGS timeout](https://developer.android.com/develop/background-work/services/fgs/timeout)). The app must stop within seconds, save the journal, and post "Paused by Android's background limit. Open Amanah to continue."
 3. **Shared files:** take the URIs with `FLAG_GRANT_READ_URI_PERMISSION` in `ClipData` and, where possible, a persistable grant at the moment of sharing. Open file descriptors at that moment for small sets. Some apps take back access later (a known gap today).
 4. **Saving:** MediaStore `Download/KhanLabs` with `IS_PENDING=1`, cleared when the file is checked. SAF folders through `DocumentsContract` directly (not `DocumentFile.findFile`, which is very slow with thousands of files). Write at offsets with `openFileDescriptor(uri, "rw")` and `FileChannel.write(buf, pos)`.
 5. **Permissions today:** `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE`, `WAKE_LOCK`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WRITE_EXTERNAL_STORAGE` (max SDK 28). Later: `ACCESS_LOCAL_NETWORK`, `CAMERA`, `NEARBY_WIFI_DEVICES` with `neverForLocation`, `CHANGE_WIFI_STATE`; for TV, `REQUEST_INSTALL_PACKAGES`.
@@ -1063,7 +1063,7 @@ Every crash becomes a regression test before its fix is merged. The corpus is ke
 | H-17 | `done` with a wrong digest | File not moved into place; state shows the mismatch |
 | H-18 | TLS ClientHello on the Share to anyone port | Closed within 100 ms, nothing logged as an error |
 | H-19 | Random bytes on every open port (boofuzz) | No crash; port still serves normal requests afterwards |
-| H-20 | QR code with a public IP, `0.0.0.0`, a 4 KB name, or missing fields | Refused with "This QR code is not from LAN Share on this network" |
+| H-20 | QR code with a public IP, `0.0.0.0`, a 4 KB name, or missing fields | Refused with "This QR code is not from Amanah on this network" |
 | H-21 | A raw name with a leading space (NTFS allows it) sent by a test client that skips the sender's cleaning | v1 receiver: refuses with the file name and reason (E-41). v2 receiver: saves it under a safe name and reports that name. |
 
 ### 7.4 Security tests
@@ -1143,7 +1143,7 @@ Every crash becomes a regression test before its fix is merged. The corpus is ke
 | E-07 | File over 4 GB to FAT32 | E-27 | Wrong token (web) |
 | E-08 | Source file deleted during send | E-28 | Notifications off (offer cannot be shown in the background) |
 | E-09 | Source file changed during send | E-29 | Camera refused (QR scan) |
-| E-10 | Shared file access taken back by the other app | E-30 | QR code not from LAN Share |
+| E-10 | Shared file access taken back by the other app | E-30 | QR code not from Amanah |
 | E-11 | Wi-Fi dropped | E-31 | QR code from another network |
 | E-12 | IP address changed | E-32 | Pairing code withdrawn after 5 wrong tries |
 | E-13 | Other device's ID changed (pin mismatch) | E-33 | Paired device's key changed |
@@ -1502,7 +1502,7 @@ IzzyOnDroid needs an OSI or FSF approved open-source licence, no proprietary par
 
 **Rules for the page**
 1. One-time tips only. No monthly option, no memberships, no supporter tiers, no goal bar, no list of tippers.
-2. Top line: "Thank you. A tip does not unlock anything. LAN Share is free for everyone, forever."
+2. Top line: "Thank you. A tip does not unlock anything. Amanah is free for everyone, forever."
 3. The amount from `?amount=N` is shown as the suggestion. Custom has no suggestion.
 4. No analytics, no outside scripts, fonts or images, no cookies. The website is not the app, but it keeps the same promise.
 5. Everything static. QR codes are made at build time as SVG files, never by an online QR service (which would see every visit).
@@ -1598,7 +1598,7 @@ IzzyOnDroid needs an OSI or FSF approved open-source licence, no proprietary par
 
 **Q12. A tip card on TV?** **Recommendation:** no. Many TVs have no usable browser. TV About shows "khanlabs.dev" as plain text.
 
-**Q13. Is the name final?** "LAN Share" does not describe direct mode. **Recommendation:** keep it until before any store listing (R10), then decide once.
+**Q13. Is the name final?** Decided 2026-10-06: **Amanah**, shown with "File sharing by KhanLabs". It was KhanLabs LAN Share, but "LAN" would be wrong once direct mode and Share to anyone exist. Still to do before any store listing (R10): check the name in the Play Store and trademark registers, and decide whether to rename the GitHub repos.
 
 **Q14. Team and dates.** One developer needs about 8 to 11 months for everything, and about 4.5 to 6 months to the first public release. **Recommendation:** set dates only after R1, when real baselines exist.
 

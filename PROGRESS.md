@@ -1,4 +1,4 @@
-# Progress: KhanLabs LAN Share (Android)
+# Progress: Amanah (Android)
 
 Update this file at the end of every work session. Newest entries at the top of "Log".
 The plan is `docs/PLAN.md` (rewritten 2026-10-06). The work order was changed on 2026-10-06 at the owner's request: UI and features first (R6 and R7, and the UI parts of R2), then the reliability phases R1 to R5 (test lab, v1 fixes, protocol v2, hardening), then R8 to R10. Nothing goes public before the R5 gates pass. The older "Phase" names below map to it roughly as Phase 0 and 1 = R2 and R3, Phase 2 = R4 and R6, Phase 3 = R8, Phase 4 = R9, Phase 5 = R5 and R10.
@@ -153,6 +153,11 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-06 (rename to Amanah)
+- The owner chose the name **Amanah** ("something entrusted to your care"), shown with "File sharing by KhanLabs". The app label, top bar, welcome screen, About screen, messages and the `app` text sent to other devices say Amanah now.
+- The application id is now `dev.khanlabs.amanah` (debug: `dev.khanlabs.amanah.debug`). It is a new app on the phone: the old debug app, its device ID and its Activity list are gone. Nothing was public yet, so this was the cheap time to do it.
+- Not changed: the repo names, the code package `dev.khanlabs.lanshare`, the wire names (`_klshare._tcp`, `klshare://`) and the `Download/KhanLabs` save folder. Renaming the GitHub repos waits for the owner's OK.
 
 ### 2026-10-06 (first run, QR connect, shortcuts)
 - First run: a welcome screen with the name field and a Get started button (commit `0047500` and later). Permissions are asked once, when Get started is tapped, not on every launch. If notifications are off later, the Receiving sheet shows a card with a Turn on button that opens the system page.

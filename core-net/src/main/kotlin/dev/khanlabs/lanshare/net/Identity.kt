@@ -75,7 +75,7 @@ class Identity(val certDer: ByteArray, val privateKey: PrivateKey) {
             val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1"), random) }
                 .generateKeyPair()
             val name = X500NameBuilder(BCStyle.INSTANCE)
-                .addRDN(BCStyle.CN, "KhanLabs LAN Share ($label)")
+                .addRDN(BCStyle.CN, "Amanah ($label)")
                 .addRDN(BCStyle.O, "KhanLabs")
                 .build()
             val now = System.currentTimeMillis()

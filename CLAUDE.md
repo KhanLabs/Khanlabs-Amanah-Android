@@ -1,4 +1,6 @@
-# KhanLabs LAN Share (Android): main instructions
+# Amanah (Android): main instructions
+
+The product was called KhanLabs LAN Share until 2026-10-06. The repo names (`khanlabs-lanshare`, `khanlabs-lanshare-android`), the code package (`dev.khanlabs.lanshare`) and the wire names (`_klshare._tcp`, `klshare://`) did not change.
 
 Read this first, then `PROGRESS.md` (where things stand) and `docs/PLAN.md` (the full plan, sections B, C and D matter most here).
 
@@ -107,7 +109,7 @@ Current state: **the first phone build is being tested.** It speaks protocol v1 
 Needs JDK 17 (`JAVA_HOME`) and the Android SDK with platform 37 (`local.properties` has `sdk.dir`; it is not committed).
 
 ```
-gradlew assembleDebug                         # debug APK (app id dev.khanlabs.lanshare.debug)
+gradlew assembleDebug                         # debug APK (app id dev.khanlabs.amanah.debug)
 gradlew :core-protocol:test :core-net:test    # JVM tests, no device needed
 gradlew connectedCheck                        # instrumented tests on a device or emulator
 gradlew assembleRelease                       # signed universal APK (needs the release keystore)

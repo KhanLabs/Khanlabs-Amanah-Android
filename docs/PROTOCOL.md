@@ -2,7 +2,7 @@
 
 # KhanLabs Send protocol, version 1
 
-This is how KhanLabs LAN Share devices find each other on a local network and send files and text. The Windows app implements it in `transfer.py`. A phone app (Android or iOS) that follows this document can send to and receive from the Windows app, and from other phones.
+This is how Amanah devices (called KhanLabs LAN Share before 2026-10-06) find each other on a local network and send files and text. The Windows app implements it in `transfer.py`. A phone app (Android or iOS) that follows this document can send to and receive from the Windows app, and from other phones.
 
 The design is simple on purpose: DNS-SD to find devices, then JSON over HTTPS. Every send asks the receiving person to accept it first.
 

@@ -75,7 +75,7 @@ internal fun openNotificationSettings(context: Context) {
     try {
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (e: Exception) {
-        toast(context, "Open Settings, then Apps, then LAN Share, then Notifications.")
+        toast(context, "Open Settings, then Apps, then Amanah, then Notifications.")
     }
 }
 

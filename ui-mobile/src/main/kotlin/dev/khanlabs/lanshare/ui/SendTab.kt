@@ -113,7 +113,7 @@ private fun NoDevices(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, onH
         Column(Modifier.padding(16.dp)) {
             Text("No devices found yet")
             Spacer(Modifier.height(4.dp))
-            Muted(if (s.receiving) "Open KhanLabs LAN Share on the other device, on the same Wi-Fi."
+            Muted(if (s.receiving) "Open Amanah on the other device, on the same Wi-Fi."
                   else "Turn on receiving to look for other devices, or use Add by IP.")
             Spacer(Modifier.height(8.dp))
             FindActions(onScan, onAddByIp, onHelp)

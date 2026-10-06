@@ -31,7 +31,7 @@ data class ConnectCode(val id: String, val name: String, val hosts: List<String>
         private val V4 = Regex("""(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})""")
         private val V6_CHARS = Regex("[0-9a-fA-F:.]+")
 
-        /** The code in [text], or null when it is not a usable LAN Share code. */
+        /** The code in [text], or null when it is not a usable Amanah code. */
         fun parse(text: String): ConnectCode? {
             val t = text.trim()
             if (t.length > MAX_TEXT) return null

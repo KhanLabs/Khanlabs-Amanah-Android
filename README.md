@@ -1,4 +1,6 @@
-# KhanLabs LAN Share (Android)
+# Amanah (Android)
+
+File sharing by KhanLabs. It was called KhanLabs LAN Share before 2026-10-06.
 
 Send large files, folders and text between Android phones, tablets, Android TV, Fire TV and Windows PCs. It works on the same Wi-Fi, or directly between two devices with no router.
 
@@ -6,7 +8,7 @@ Send large files, folders and text between Android phones, tablets, Android TV, 
 
 ## What it will do
 
-- **Find devices.** Other devices running KhanLabs LAN Share show up by themselves, or you can scan a QR code.
+- **Find devices.** Other devices running Amanah show up by themselves, or you can scan a QR code.
 - **Large files.** Transfers resume after a dropped connection or a restart. Every file is checked when it arrives.
 - **Many small files** move as fast as big ones.
 - **No router needed.** Wi-Fi Direct or a local hotspot connects two devices directly.

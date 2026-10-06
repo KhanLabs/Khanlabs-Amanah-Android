@@ -114,7 +114,7 @@ object Engine : ReceiverEvents {
     private lateinit var app: Context
     lateinit var identity: Identity
         private set
-    var appLabel = "KhanLabs LAN Share Android"
+    var appLabel = "Amanah Android"
         private set
     private var debugBuild = false
     private val clients = Clients()
@@ -147,7 +147,7 @@ object Engine : ReceiverEvents {
     fun init(context: Context, versionName: String, debug: Boolean) {
         if (isInitialized) return
         app = context.applicationContext
-        appLabel = "KhanLabs LAN Share Android $versionName"
+        appLabel = "Amanah Android $versionName"
         debugBuild = debug
         // no_backup: a phone restored from a backup must not get this phone's device ID
         identity = Identity.loadOrCreate(File(app.noBackupFilesDir, "identity"), "Android")

@@ -7,7 +7,7 @@ android {
     namespace = "dev.khanlabs.lanshare"
     compileSdk = 37
     defaultConfig {
-        applicationId = "dev.khanlabs.lanshare"
+        applicationId = "dev.khanlabs.amanah"
         minSdk = 23
         targetSdk = 36
         versionCode = 1

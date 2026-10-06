@@ -97,7 +97,7 @@ internal fun ScanScreen(onCode: (String) -> Unit, onAddByIp: () -> Unit, onDismi
                         Button(onClick = { ask.launch(Manifest.permission.CAMERA) }) { Text("Allow camera") }
                     } else {
                         Spacer(Modifier.height(24.dp))
-                        Text("The camera is off for LAN Share", style = MaterialTheme.typography.titleMedium)
+                        Text("The camera is off for Amanah", style = MaterialTheme.typography.titleMedium)
                         Muted("You can turn it on in Settings, or add the device by its address instead.", modifier = Modifier.padding(vertical = 8.dp))
                         Button(onClick = { openAppSettings(context) }) { Text("Open Settings") }
                     }

@@ -169,7 +169,7 @@ internal fun DevicePickerSheet(
         Spacer(Modifier.height(8.dp))
         if (devices.isEmpty()) {
             Text("No devices found yet.", style = MaterialTheme.typography.bodyLarge)
-            Muted("Open KhanLabs LAN Share on the other device, on the same Wi-Fi.")
+            Muted("Open Amanah on the other device, on the same Wi-Fi.")
             FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onScan) { Text("Scan QR code") }
                 OutlinedButton(onClick = onAddByIp) { Text("Add by IP") }
@@ -269,11 +269,11 @@ internal fun HelpSheet(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, on
         Text("Not showing up?", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Step("1", "Both devices on the same Wi-Fi", "Not a guest network, and not mobile data.")
-        Step("2", "Open LAN Share on the other device", "Keep its window open and receiving turned on.")
+        Step("2", "Open Amanah on the other device", "Keep its window open and receiving turned on.")
         Step("3", "On a Windows PC, set the network to Private",
-            "Settings, Network and internet, Wi-Fi, your network, then Private network. Allow LAN Share if Windows asks.")
+            "Settings, Network and internet, Wi-Fi, your network, then Private network. Allow Amanah if Windows asks.")
         Step("4", "Still nothing? Scan its QR code",
-            "Open LAN Share on the other device and show its QR code. Scan it here. This works whenever both devices can reach each other.")
+            "Open Amanah on the other device and show its QR code. Scan it here. This works whenever both devices can reach each other.")
         Step("5", "No camera? Use the address",
             "The other device shows its address, like 192.168.1.20. Type it with Add by IP.")
         if (s.receiving && s.port != null && s.addresses.isNotEmpty()) {

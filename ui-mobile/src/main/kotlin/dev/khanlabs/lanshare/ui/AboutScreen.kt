@@ -63,7 +63,8 @@ fun AboutScreen(onBack: () -> Unit) {
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("KhanLabs LAN Share", style = MaterialTheme.typography.titleLarge)
+            Text("Amanah", style = MaterialTheme.typography.titleLarge)
+            Muted("File sharing by KhanLabs")
             Muted("Version $version")
             Spacer(Modifier.height(16.dp))
             Text("Built for people, not advertisers.", style = MaterialTheme.typography.titleMedium,

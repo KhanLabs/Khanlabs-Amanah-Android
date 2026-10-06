@@ -29,7 +29,7 @@ fun main(args: Array<String>) {
             }
         }
     }
-    val me = Me(Identity.create("cli").id, "Kotlin sender", "android", "KhanLabs LAN Share Android test")
+    val me = Me(Identity.create("cli").id, "Kotlin sender", "android", "Amanah Android test")
     val job = SendJob(clients, me, device, items, text) { j ->
         if (j.state != SendJob.State.SENDING) println("${j.state} ${j.message}")
     }
