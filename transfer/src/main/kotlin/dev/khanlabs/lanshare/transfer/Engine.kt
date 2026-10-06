@@ -182,7 +182,7 @@ object Engine : ReceiverEvents {
             if (receiver != null) return true
             try {
                 val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.default(app) }, this, appLabel,
-                    peekPlainHttp = Build.VERSION.SDK_INT >= 24)
+                    peeker = SocketPeek)
                 rx.start()
                 receiver = rx
                 listenError = null

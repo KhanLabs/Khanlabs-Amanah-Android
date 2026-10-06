@@ -69,13 +69,14 @@ class Receiver(
     host: InetAddress? = null,
     idleTimeoutMs: Int = V1.IDLE_TIMEOUT_S * 1000,
     peekPlainHttp: Boolean = true,
+    peeker: Peeker? = null,
     private val offerTimeoutMs: Long = V1.OFFER_TIMEOUT_S * 1000,
 ) {
     private val offers = LinkedHashMap<String, Offer>()
     private val lock = Any()
     private val random = SecureRandom()
     private val server = HttpsServer(identity.serverContext(), ::handle, host, port, V1.PORT_TRIES, idleTimeoutMs,
-        V1.MAX_CONN_PER_IP, V1.MAX_CONN_TOTAL, peekPlainHttp)
+        V1.MAX_CONN_PER_IP, V1.MAX_CONN_TOTAL, peekPlainHttp, peeker)
     val port: Int get() = server.port
     @Volatile private var sweeper: Thread? = null
 

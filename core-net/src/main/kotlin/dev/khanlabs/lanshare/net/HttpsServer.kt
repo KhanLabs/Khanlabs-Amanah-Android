@@ -123,13 +123,19 @@ class Exchange internal constructor(
     }
 }
 
+/** Returns the first byte waiting on a connection without taking it, or -1 at end of stream; throws on timeout. */
+fun interface Peeker {
+    fun peek(s: Socket, timeoutMs: Int): Int
+}
+
 /**
  * A small HTTPS server for the device API. One port takes both: TLS is served, plain HTTP gets a 301 to
  * https:// (PROTOCOL.md section 3). Limits match the Windows app: connections per address and in total, and a
  * connection that sends nothing for [idleTimeoutMs] is dropped.
  *
- * [peekPlainHttp] needs SSLSocketFactory.createSocket(socket, consumed, autoClose), which Android has from API 24.
- * Without it every connection is treated as TLS, and plain HTTP simply fails.
+ * To tell the two apart, the server looks at the first byte. With a [peeker] it is left on the socket for TLS to
+ * read; without one it is read and handed back with SSLSocketFactory.createSocket(socket, consumed, autoClose),
+ * which the JDK has but Android's TLS does not. With [peekPlainHttp] off, every connection is treated as TLS.
  */
 class HttpsServer(
     private val tls: SSLContext,
@@ -141,6 +147,7 @@ class HttpsServer(
     private val maxPerIp: Int = 16,
     private val maxTotal: Int = 64,
     private val peekPlainHttp: Boolean = true,
+    private val peeker: Peeker? = null,
 ) {
     private val server: ServerSocket = bind(host, firstPort, tries)
     val port: Int = server.localPort
@@ -214,16 +221,26 @@ class HttpsServer(
         s.tcpNoDelay = true
         s.soTimeout = HANDSHAKE_TIMEOUT_MS
         val factory = tls.socketFactory
-        val secure: SSLSocket = if (peekPlainHttp) {
-            val first = s.getInputStream().read()
-            if (first < 0) return
-            if (first != TLS_HANDSHAKE) {
-                s.soTimeout = idleTimeoutMs
-                return redirect(s, first, ip)
+        val secure: SSLSocket = when {
+            !peekPlainHttp -> factory.createSocket(s, ip, s.port, true) as SSLSocket
+            peeker != null -> {
+                val first = peeker.peek(s, HANDSHAKE_TIMEOUT_MS)
+                if (first < 0) return
+                if (first != TLS_HANDSHAKE) {
+                    s.soTimeout = idleTimeoutMs
+                    return redirect(s, s.getInputStream().read(), ip)
+                }
+                factory.createSocket(s, ip, s.port, true) as SSLSocket
             }
-            factory.createSocket(s, ByteArrayInputStream(byteArrayOf(first.toByte())), true) as SSLSocket
-        } else {
-            factory.createSocket(s, ip, s.port, true) as SSLSocket
+            else -> {
+                val first = s.getInputStream().read()
+                if (first < 0) return
+                if (first != TLS_HANDSHAKE) {
+                    s.soTimeout = idleTimeoutMs
+                    return redirect(s, first, ip)
+                }
+                factory.createSocket(s, ByteArrayInputStream(byteArrayOf(first.toByte())), true) as SSLSocket
+            }
         }
         secure.useClientMode = false
         secure.enabledProtocols = secure.supportedProtocols.filter { it == "TLSv1.2" || it == "TLSv1.3" }.toTypedArray()
