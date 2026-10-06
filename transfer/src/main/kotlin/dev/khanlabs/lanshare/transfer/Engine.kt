@@ -26,6 +26,7 @@ import dev.khanlabs.lanshare.net.ReceiverSettings
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.SendJob
 import dev.khanlabs.lanshare.net.fetchInfo
+import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.V1
 import dev.khanlabs.lanshare.store.Stores
@@ -387,6 +388,49 @@ object Engine : ReceiverEvents {
             refresh()
             main.post { onResult(error) }
         }
+    }
+
+    /**
+     * Adds the device a scanned QR code names. Unlike "Add by IP" the full ID is pinned: the device that answers must
+     * hold the certificate the code names. Calls back on the main thread with the device, or with a message.
+     */
+    fun addByCode(code: ConnectCode, onResult: (device: Device?, error: String?) -> Unit) {
+        io.execute {
+            var device: Device? = null
+            var error: String? = "Nothing answered. Check that both devices are on the same Wi-Fi."
+            if (code.id == identity.id) {
+                error = "That is this device."
+            } else for (host in code.hosts) {
+                try {
+                    val d = fetchInfo(clients, host, code.port, code.id, timeoutS = 3)
+                    val found = d.copy(hosts = listOf(host) + code.hosts.filter { it != host })
+                    synchronized(lock) {
+                        added.removeAll { it.id == found.id }
+                        added.add(found)
+                    }
+                    saveAdded()
+                    device = found
+                    error = null
+                    break
+                } catch (e: Exception) {
+                    if (Clients.mismatch(e) != null) {
+                        error = "The device at that address is not the one in the QR code. The code may be out of date."
+                        break
+                    }
+                }
+            }
+            refresh()
+            main.post { onResult(device, error) }
+        }
+    }
+
+    /** This device's own connect code, for showing as a QR code. Null until it is listening on a Wi-Fi address. */
+    fun myCode(): ConnectCode? {
+        val s = state.value
+        val port = s.port ?: return null
+        val hosts = s.addresses.filter { ConnectCode.isLocalAddress(it) }
+        if (hosts.isEmpty()) return null
+        return ConnectCode(identity.id, s.name, hosts.take(ConnectCode.MAX_HOSTS), port)
     }
 
     fun forget(device: Device) {

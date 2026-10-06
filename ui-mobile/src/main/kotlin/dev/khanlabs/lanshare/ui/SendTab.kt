@@ -5,6 +5,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +56,7 @@ internal fun SendTab(
     onKind: (Kind) -> Unit,
     onDevice: (Device) -> Unit,
     onDetails: (Device) -> Unit,
+    onScan: () -> Unit,
     onAddByIp: () -> Unit,
     onHelp: () -> Unit,
 ) {
@@ -85,14 +88,11 @@ internal fun SendTab(
         item {
             SectionHeader("Nearby") {
                 IconButton(onClick = { Engine.refreshNearby() }) { Glyph(Icons.Refresh, description = "Refresh") }
-                TextButton(onClick = onAddByIp) { Text("Add by IP") }
             }
         }
-        if (devices.isEmpty()) item { NoDevices(s, onHelp) }
+        if (devices.isEmpty()) item { NoDevices(s, onScan, onAddByIp, onHelp) }
         items(devices, key = { "dev:" + it.id }) { d -> DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }) }
-        if (devices.isNotEmpty()) item {
-            TextButton(onClick = onHelp, Modifier.fillMaxWidth()) { Text("Not showing up?") }
-        }
+        if (devices.isNotEmpty()) item { FindActions(onScan, onAddByIp, onHelp) }
     }
 }
 
@@ -108,15 +108,31 @@ private fun KindButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
-private fun NoDevices(s: UiState, onHelp: () -> Unit) {
+private fun NoDevices(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit) {
     Card {
         Column(Modifier.padding(16.dp)) {
             Text("No devices found yet")
             Spacer(Modifier.height(4.dp))
             Muted(if (s.receiving) "Open KhanLabs LAN Share on the other device, on the same Wi-Fi."
                   else "Turn on receiving to look for other devices, or use Add by IP.")
-            TextButton(onClick = onHelp, contentPadding = PaddingValues(0.dp)) { Text("Not showing up?") }
+            Spacer(Modifier.height(8.dp))
+            FindActions(onScan, onAddByIp, onHelp)
         }
+    }
+}
+
+/** Ways to connect when a device is missing. Wraps onto more lines at large text sizes. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FindActions(onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        OutlinedButton(onClick = onScan) {
+            Glyph(Icons.Qr, MaterialTheme.colorScheme.primary, 18)
+            Spacer(Modifier.width(8.dp))
+            Text("Scan QR code")
+        }
+        OutlinedButton(onClick = onAddByIp) { Text("Add by IP") }
+        TextButton(onClick = onHelp) { Text("Not showing up?") }
     }
 }
 

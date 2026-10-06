@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -149,9 +151,11 @@ internal fun OfferSheet(v: IncomingView) {
 // --- sending
 
 /** Content is picked; now pick the device to send it to. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DevicePickerSheet(
-    what: String, s: UiState, onPick: (Device) -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit, onDismiss: () -> Unit,
+    what: String, s: UiState, onPick: (Device) -> Unit, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val devices = s.nearby + s.added
     Sheet(onDismiss) {
@@ -163,7 +167,8 @@ internal fun DevicePickerSheet(
         if (devices.isEmpty()) {
             Text("No devices found yet.", style = MaterialTheme.typography.bodyLarge)
             Muted("Open KhanLabs LAN Share on the other device, on the same Wi-Fi.")
-            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onScan) { Text("Scan QR code") }
                 OutlinedButton(onClick = onAddByIp) { Text("Add by IP") }
                 TextButton(onClick = onHelp) { Text("Not showing up?") }
             }
@@ -191,7 +196,7 @@ internal enum class Kind { Files, Media, Folder, Text }
 
 @Composable
 internal fun ReceivingSheet(
-    s: UiState, onReceivingChange: (Boolean) -> Unit, onRename: () -> Unit, onDismiss: () -> Unit,
+    s: UiState, onReceivingChange: (Boolean) -> Unit, onRename: () -> Unit, onShowQr: () -> Unit, onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     Sheet(onDismiss) {
@@ -225,7 +230,12 @@ internal fun ReceivingSheet(
             Muted("Your address")
             Text(s.addresses.joinToString("\n") { "$it:${s.port}" }, style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-            Muted("If this phone doesn't show up on another device, type this address there (Add by IP).")
+            Muted("If this phone doesn't show up on another device, scan its QR code or type this address there (Add by IP).")
+            OutlinedButton(onClick = onShowQr, Modifier.padding(top = 8.dp)) {
+                Glyph(Icons.Qr, MaterialTheme.colorScheme.primary, 18)
+                Spacer(Modifier.width(8.dp))
+                Text("Show QR code")
+            }
         }
         Spacer(Modifier.height(8.dp))
         Muted("Device ID ${s.shortId}")
@@ -251,7 +261,7 @@ internal fun statusLine(s: UiState): String = when {
 // --- help
 
 @Composable
-internal fun HelpSheet(s: UiState, onAddByIp: () -> Unit, onDismiss: () -> Unit) {
+internal fun HelpSheet(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, onDismiss: () -> Unit) {
     Sheet(onDismiss) {
         Text("Not showing up?", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
@@ -259,14 +269,17 @@ internal fun HelpSheet(s: UiState, onAddByIp: () -> Unit, onDismiss: () -> Unit)
         Step("2", "Open LAN Share on the other device", "Keep its window open and receiving turned on.")
         Step("3", "On a Windows PC, set the network to Private",
             "Settings, Network and internet, Wi-Fi, your network, then Private network. Allow LAN Share if Windows asks.")
-        Step("4", "Still nothing? Use the address",
+        Step("4", "Still nothing? Scan its QR code",
+            "Open LAN Share on the other device and show its QR code. Scan it here. This works whenever both devices can reach each other.")
+        Step("5", "No camera? Use the address",
             "The other device shows its address, like 192.168.1.20. Type it with Add by IP.")
         if (s.receiving && s.port != null && s.addresses.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Muted("This phone's address: ${s.addresses.first()}:${s.port}")
         }
         Spacer(Modifier.height(12.dp))
-        Button(onClick = onAddByIp, Modifier.fillMaxWidth()) { Text("Add by IP address") }
+        Button(onClick = onScan, Modifier.fillMaxWidth()) { Text("Scan QR code") }
+        OutlinedButton(onClick = onAddByIp, Modifier.fillMaxWidth()) { Text("Add by IP address") }
     }
 }
 

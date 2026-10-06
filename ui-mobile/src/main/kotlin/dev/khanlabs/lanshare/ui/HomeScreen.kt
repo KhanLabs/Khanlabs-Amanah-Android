@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.net.SendItem
+import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.Items
@@ -96,6 +97,10 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
     var receivingOpen by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
+    var scanOpen by remember { mutableStateOf(false) }
+    var qrOpen by remember { mutableStateOf(false) }
+    var connecting by remember { mutableStateOf(false) }
+    var connectMsg by remember { mutableStateOf<String?>(null) }  // the result of a scan, shown until dismissed
     var renameOpen by remember { mutableStateOf(false) }
     var clearOpen by remember { mutableStateOf(false) }
     var detailsFor by remember { mutableStateOf<Device?>(null) }
@@ -157,6 +162,20 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
             )
         }
     }
+    /** A QR code was read: add the device it names, with its full ID pinned. */
+    fun scanned(text: String) {
+        scanOpen = false
+        val code = ConnectCode.parse(text)
+        if (code == null) {
+            connectMsg = "That QR code is not from LAN Share."
+            return
+        }
+        connecting = true
+        Engine.addByCode(code) { device, error ->
+            connecting = false
+            connectMsg = if (device != null) "Connected to ${device.name}. It is now in your Nearby list." else error
+        }
+    }
     fun closePending() {
         if (pending?.fromShare == true) onShareDone()
         pending = null
@@ -198,6 +217,7 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
                         onKind = { dest = null; startPick(it) },
                         onDevice = { chooseFor = it },
                         onDetails = { detailsFor = it },
+                        onScan = { scanOpen = true },
                         onAddByIp = { addOpen = true },
                         onHelp = { helpOpen = true },
                     )
@@ -216,13 +236,16 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
         DevicePickerSheet(p.what, s, onPick = { d ->
             sendPending(context, scope, d, p)
             closePending()
-        }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = ::closePending)
+        }, onScan = { scanOpen = true }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = ::closePending)
     }
     chooseFor?.let { d ->
         WhatToSendSheet(d, onChoose = { kind -> dest = d; chooseFor = null; startPick(kind) }, onDismiss = { chooseFor = null })
     }
-    if (receivingOpen) ReceivingSheet(s, onReceivingChange, onRename = { renameOpen = true }, onDismiss = { receivingOpen = false })
-    if (helpOpen) HelpSheet(s, onAddByIp = { helpOpen = false; addOpen = true }, onDismiss = { helpOpen = false })
+    if (receivingOpen) ReceivingSheet(s, onReceivingChange, onRename = { renameOpen = true },
+        onShowQr = { receivingOpen = false; qrOpen = true }, onDismiss = { receivingOpen = false })
+    if (qrOpen) QrSheet(remember(s.addresses, s.port, s.name) { Engine.myCode() }, onDismiss = { qrOpen = false })
+    if (helpOpen) HelpSheet(s, onScan = { helpOpen = false; scanOpen = true },
+        onAddByIp = { helpOpen = false; addOpen = true }, onDismiss = { helpOpen = false })
     detailsFor?.let { d ->
         DeviceSheet(d, added = s.added.any { it.id == d.id }, onForget = { Engine.forget(d); detailsFor = null }, onDismiss = { detailsFor = null })
     }
@@ -232,6 +255,21 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
     }
     if (textFirst) TextDialog("Send text", onDone = { textFirst = false }, sendLabel = "Next") { text -> pending = Pending("text", text = text) }
     if (addOpen) AddByIpDialog(onDone = { addOpen = false })
+    if (scanOpen) ScanScreen(onCode = ::scanned, onAddByIp = { scanOpen = false; addOpen = true }, onDismiss = { scanOpen = false })
+    if (connecting) AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {},
+        title = { Text("Connecting") },
+        text = { Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
+            Text("Checking the device.")
+        } },
+    )
+    connectMsg?.let { msg ->
+        AlertDialog(onDismissRequest = { connectMsg = null }, text = { Text(msg) },
+            confirmButton = { Button(onClick = { connectMsg = null }) { Text("OK") } })
+    }
     if (renameOpen) RenameDialog(s.name, onDone = { renameOpen = false })
     if (clearOpen) ConfirmDialog(
         "Clear activity?", "This removes the list of what you sent and received. The files themselves stay where they are.",

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Only to read a QR code when the person taps Scan QR code. Nothing is recorded or saved. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- TV boxes and tablets without a camera can still install the app -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:name=".LanShareApp"
         android:allowBackup="false"
