@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.protocol.ConnectCode
+import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.Items
@@ -87,7 +88,7 @@ private class Pending(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Boolean) -> Unit) {
+fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareDone: () -> Unit, onReceivingChange: (Boolean) -> Unit) {
     val s by Engine.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -100,6 +101,7 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
     var scanOpen by remember { mutableStateOf(false) }
     var qrOpen by remember { mutableStateOf(false) }
     var connecting by remember { mutableStateOf(false) }
+    var linkCode by remember { mutableStateOf<ConnectCode?>(null) }  // asking whether to add this device
     var connectMsg by remember { mutableStateOf<String?>(null) }  // the result of a scan, shown until dismissed
     var renameOpen by remember { mutableStateOf(false) }
     var clearOpen by remember { mutableStateOf(false) }
@@ -162,18 +164,27 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
             )
         }
     }
-    /** A QR code was read: add the device it names, with its full ID pinned. */
-    fun scanned(text: String) {
-        scanOpen = false
-        val code = ConnectCode.parse(text)
-        if (code == null) {
-            connectMsg = "That QR code is not from LAN Share."
-            return
-        }
+    /** Add the device a code names, with its full ID pinned. */
+    fun connect(code: ConnectCode) {
         connecting = true
         Engine.addByCode(code) { device, error ->
             connecting = false
             connectMsg = if (device != null) "Connected to ${device.name}. It is now in your Nearby list." else error
+        }
+    }
+    /** A QR code was read by the scanner in this app. */
+    fun scanned(text: String) {
+        scanOpen = false
+        val code = ConnectCode.parse(text)
+        if (code == null) connectMsg = "That QR code is not from LAN Share." else connect(code)
+    }
+
+    // a connect link opened from the phone's camera app: ask before adding anything
+    LaunchedEffect(link) {
+        if (link.isNotEmpty()) {
+            val code = ConnectCode.parse(link)
+            if (code == null) connectMsg = "That link is not a LAN Share connect code." else linkCode = code
+            onLinkHandled()
         }
     }
     fun closePending() {
@@ -266,6 +277,20 @@ fun HomeScreen(shared: Shared, onShareDone: () -> Unit, onReceivingChange: (Bool
             Text("Checking the device.")
         } },
     )
+    linkCode?.let { code ->
+        AlertDialog(
+            onDismissRequest = { linkCode = null },
+            title = { Text("Add this device?") },
+            text = { Column {
+                Text(code.name.ifEmpty { "Unnamed device" }, style = MaterialTheme.typography.titleMedium)
+                Muted("${code.hosts.first()}:${code.port}  ·  ID ${DeviceId.short(code.id)}", mono = true)
+                Spacer(Modifier.height(8.dp))
+                Muted("Only add it if you scanned this code yourself, on your own network.")
+            } },
+            confirmButton = { Button(onClick = { linkCode = null; connect(code) }) { Text("Add") } },
+            dismissButton = { TextButton(onClick = { linkCode = null }) { Text("Cancel") } },
+        )
+    }
     connectMsg?.let { msg ->
         AlertDialog(onDismissRequest = { connectMsg = null }, text = { Text(msg) },
             confirmButton = { Button(onClick = { connectMsg = null }) { Text("OK") } })

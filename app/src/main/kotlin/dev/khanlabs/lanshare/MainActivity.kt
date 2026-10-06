@@ -25,6 +25,7 @@ import dev.khanlabs.lanshare.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
     private var shared by mutableStateOf(Shared())
+    private var link by mutableStateOf("")  // a klshare:// connect link opened from a camera app
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
@@ -53,7 +54,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             LanShareTheme {
                 if (welcomed) {
-                    HomeScreen(shared, onShareDone = { shared = Shared() }, onReceivingChange = ::setReceiving)
+                    HomeScreen(shared, link, onLinkHandled = { link = "" }, onShareDone = { shared = Shared() },
+                        onReceivingChange = ::setReceiving)
                 } else {
                     WelcomeScreen(permissionNote = permissionNote(), onContinue = {
                         prefs.edit().putBoolean("welcomed", true).apply()
@@ -100,9 +102,13 @@ class MainActivity : ComponentActivity() {
         if (on) TransferService.start(this) else TransferService.stop(this)
     }
 
-    /** Files or text from another app's Share button. */
+    /** Files or text from another app's Share button, or a connect link from a camera app. */
     private fun readShare(intent: Intent?) {
         intent ?: return
+        if (intent.action == Intent.ACTION_VIEW) {
+            intent.data?.let { link = it.toString() }
+            return
+        }
         val uris = when (intent.action) {
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
             Intent.ACTION_SEND_MULTIPLE ->

@@ -26,6 +26,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A scanned connect QR code opened from the phone's own camera app. The app asks before adding anything. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="klshare" android:host="connect" />
+                <data android:scheme="klshare" android:host="pair" />
+            </intent-filter>
             <!-- "Share" from other apps: one or more files, or text -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
