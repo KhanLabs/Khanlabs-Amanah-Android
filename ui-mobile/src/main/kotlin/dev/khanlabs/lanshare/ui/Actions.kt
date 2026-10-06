@@ -1,11 +1,14 @@
 package dev.khanlabs.lanshare.ui
 
 import android.app.DownloadManager
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.Settings
 import android.widget.Toast
 import dev.khanlabs.lanshare.store.Stores
 
@@ -52,6 +55,27 @@ internal fun showFolder(context: Context, inside: String = "") {
         context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (e: Exception) {
         toast(context, "Open your Files app and look in Download/KhanLabs.")
+    }
+}
+
+/** True when the person has turned notifications off for this app, so offers would go unseen while the app is closed. */
+internal fun notificationsOff(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < 24) return false
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    return !nm.areNotificationsEnabled()
+}
+
+/** Opens this app's notification page in Android Settings. */
+internal fun openNotificationSettings(context: Context) {
+    val intent = if (Build.VERSION.SDK_INT >= 26) {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+    }
+    try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        toast(context, "Open Settings, then Apps, then LAN Share, then Notifications.")
     }
 }
 

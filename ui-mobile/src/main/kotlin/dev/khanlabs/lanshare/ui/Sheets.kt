@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -199,6 +201,16 @@ internal fun ReceivingSheet(
                 Muted(statusLine(s))
             }
             Switch(checked = s.receiving, onCheckedChange = onReceivingChange)
+        }
+        if (s.receiving && notificationsOff(context)) {
+            Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Notifications are off", style = MaterialTheme.typography.titleSmall)
+                    Muted("You will not see an offer when the app is closed. Turn notifications on to accept files from the lock screen.")
+                    TextButton(onClick = { openNotificationSettings(context); onDismiss() }) { Text("Turn on") }
+                }
+            }
         }
         HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().clickable(onClick = onRename).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {

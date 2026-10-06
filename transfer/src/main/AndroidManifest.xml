@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 17 asks before an app talks to devices on the local network. Older versions ignore this line. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- Android 6 to 9 save received files straight into Download/KhanLabs -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

@@ -21,6 +21,7 @@ import dev.khanlabs.lanshare.transfer.TransferService
 import dev.khanlabs.lanshare.ui.HomeScreen
 import dev.khanlabs.lanshare.ui.LanShareTheme
 import dev.khanlabs.lanshare.ui.Shared
+import dev.khanlabs.lanshare.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
     private var shared by mutableStateOf(Shared())
@@ -47,13 +48,38 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) readShare(intent)
+        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        var welcomed by mutableStateOf(prefs.getBoolean("welcomed", false))
         setContent {
             LanShareTheme {
-                HomeScreen(shared, onShareDone = { shared = Shared() }, onReceivingChange = ::setReceiving)
+                if (welcomed) {
+                    HomeScreen(shared, onShareDone = { shared = Shared() }, onReceivingChange = ::setReceiving)
+                } else {
+                    WelcomeScreen(permissionNote = permissionNote(), onContinue = {
+                        prefs.edit().putBoolean("welcomed", true).apply()
+                        welcomed = true
+                        askForPermissions()
+                    })
+                }
             }
         }
+        // Asked once, on "Get started". After that the Receiving sheet explains and links to Settings, so a "no" is respected.
+    }
+
+    /** Runtime permissions this phone needs, in plain words for the welcome screen. */
+    private fun permissionNote(): String = when {
+        Build.VERSION.SDK_INT >= ANDROID_17 ->
+            "Next, Android will ask to show notifications and to find devices on your Wi-Fi. " +
+                "Notifications are how you accept a file when the app is closed."
+        Build.VERSION.SDK_INT >= 33 ->
+            "Next, Android will ask to show notifications. That is how you accept a file when the app is closed."
+        else -> ""
+    }
+
+    private fun askForPermissions() {
         val wanted = buildList {
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= ANDROID_17) add(ACCESS_LOCAL_NETWORK)
             if (Build.VERSION.SDK_INT <= 28) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
         if (wanted.isNotEmpty()) askPermissions.launch(wanted.toTypedArray())
@@ -85,5 +111,11 @@ class MainActivity : ComponentActivity() {
         }
         val text = if (uris.isEmpty()) intent.getStringExtra(Intent.EXTRA_TEXT) ?: "" else ""
         shared = Shared(uris, text)
+    }
+
+    private companion object {
+        /** Android 17 (API 37) makes apps ask before they talk to devices on the local network. Not tested on a real device yet. */
+        const val ANDROID_17 = 37
+        const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
     }
 }
