@@ -150,6 +150,9 @@ Open questions for the owner (from `docs/PLAN.md`, section F):
 ## Log
 
 ### 2026-10-06 (later)
+- Tough test, PC to phone, 1 GB with the screen off, the battery "unplugged" and deep Doze forced (`dumpsys deviceidle force-idle`): done in 120 s at about 9 MB/s, SHA-256 matches. Passed.
+- Tough test, PC to phone, 2,000 files (64 MB, 0 to 64 KB, 25 nested folders) with names like `café`, `日本語`, emoji, `50% off`, `[brackets]`, 180-character names and leading spaces: first run failed, because the Windows sender sent names the receiver refuses (fixed in the Windows repo). After the fix, all 2,000 arrive with the right paths and hashes. Passed.
+- Measured: small files are slow in v1, about 14 files a second (141 s for those 2,000 files). Batching in v2 (`docs/PLAN.md` B.7) should fix this.
 - About screen (top bar): version, "Built for people, not advertisers", the five promises, and the optional Support buttons. Tested on the OnePlus: $5 opens `khanlabs.dev/support?amount=5` in the browser.
 - "Made with ♥ by Khan" bar pinned to the bottom of every screen.
 - UI and privacy research saved as `docs/UI-RESEARCH.md`.
