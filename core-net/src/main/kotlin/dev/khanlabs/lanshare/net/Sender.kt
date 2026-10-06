@@ -91,6 +91,8 @@ class SendJob(
     val device: Device,
     val items: List<SendItem>,
     val text: String = "",
+    /** "message" sends [text] as a chat text; the receiver may show it without asking. */
+    private val kind: String = "",
     private val onUpdate: (SendJob) -> Unit = {},
 ) {
     enum class State { CONNECTING, WAITING, SENDING, DONE, DECLINED, FAILED, CANCELLED }
@@ -177,7 +179,7 @@ class SendJob(
         pickHost()
         if (cancelled) return update(State.CANCELLED, "Cancelled")
         val files = items.mapIndexed { i, it -> OfferFile(i.toString(), it.name, it.size) }
-        val offer = OfferRequest(offerId, Sender(me.id, me.name, me.model, me.app), files, text)
+        val offer = OfferRequest(offerId, Sender(me.id, me.name, me.model, me.app), files, text, kind.ifEmpty { null })
         update(State.WAITING, "Waiting for ${device.name} to accept")
         val client = clients.pinned(device.id).newBuilder()
             .readTimeout(V1.OFFER_TIMEOUT_S + 15, TimeUnit.SECONDS).build()

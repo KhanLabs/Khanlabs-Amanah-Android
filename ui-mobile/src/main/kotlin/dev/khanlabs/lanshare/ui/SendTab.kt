@@ -81,7 +81,7 @@ internal fun SendTab(
                 }
                 Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     KindButton(Icons.Folder, "Folder", Modifier.weight(1f)) { onKind(Kind.Folder) }
-                    KindButton(Icons.Text, "Text", Modifier.weight(1f)) { onKind(Kind.Text) }
+                    KindButton(Icons.Chat, "Message", Modifier.weight(1f)) { onKind(Kind.Text) }
                 }
             }
         }

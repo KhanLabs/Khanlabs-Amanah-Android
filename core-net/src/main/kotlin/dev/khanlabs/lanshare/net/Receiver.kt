@@ -29,7 +29,15 @@ class IncomingFile(val id: String, val name: String, val size: Long) {
     @Volatile var savedName: String? = null
 }
 
-class Offer(val id: String, val sender: Sender, val ip: String, val files: List<IncomingFile>, val text: String) {
+class Offer(
+    val id: String,
+    val sender: Sender,
+    val ip: String,
+    val files: List<IncomingFile>,
+    val text: String,
+    /** "message" for a chat text, else empty. */
+    val kind: String = "",
+) {
     @Volatile var state: String = "waiting" // waiting, accepted, declined, expired, cancelled, done
         internal set
     @Volatile internal var lastSeen: Long = System.nanoTime()
@@ -49,6 +57,9 @@ interface ReceiverEvents {
     fun onFile(offer: Offer, file: IncomingFile) {}
     fun onProgress(offer: Offer, file: IncomingFile) {}
     fun onFinished(offer: Offer) {}
+
+    /** A chat text from a device the person already talks to. It was delivered without a prompt. */
+    fun onMessage(offer: Offer) {}
 }
 
 data class ReceiverSettings(val name: String, val receiving: Boolean)
@@ -71,6 +82,8 @@ class Receiver(
     peekPlainHttp: Boolean = true,
     peeker: Peeker? = null,
     private val offerTimeoutMs: Long = V1.OFFER_TIMEOUT_S * 1000,
+    /** May this chat text skip the prompt? Only for a known device at an address it announced (see [onMessage]). */
+    private val messageTrusted: (Offer) -> Boolean = { false },
 ) {
     private val offers = LinkedHashMap<String, Offer>()
     private val lock = Any()
@@ -133,6 +146,27 @@ class Receiver(
         }
         if (wake) offer.answered.countDown()
         notify { onFinished(offer) }
+    }
+
+    /**
+     * A chat text from a device the person already talks to is shown at once; anything else waits for an answer like
+     * any other offer. The sender's ID in an offer proves nothing (PROTOCOL.md section 7), so [messageTrusted] must also
+     * check that the text comes from an address that device announced.
+     */
+    private fun deliverMessage(offer: Offer): Boolean {
+        val trusted = try {
+            messageTrusted(offer)
+        } catch (e: Exception) {
+            false
+        }
+        if (!trusted) return false
+        synchronized(offer) {
+            offer.state = "done"
+            offer.lastSeen = System.nanoTime()
+        }
+        offer.answered.countDown()
+        notify { onMessage(offer) }
+        return true
     }
 
     private fun add(offer: Offer): String = synchronized(lock) {
@@ -220,7 +254,7 @@ class Receiver(
             return x.fail(e.status, e.code, e.message ?: e.code)
         }
         val offer = Offer(checked.id, checked.sender, x.remoteIp,
-            checked.files.map { IncomingFile(it.id, it.name, it.size) }, checked.text)
+            checked.files.map { IncomingFile(it.id, it.name, it.size) }, checked.text, checked.kind)
         when (add(offer)) {
             "duplicate" -> return x.fail(409, "duplicate", "That offer id is already in use")
             "busy" -> return x.fail(429, "busy",
@@ -234,6 +268,9 @@ class Receiver(
         if (offer.total > free) {
             finish(offer, "declined")
             return x.fail(507, "no_space", "Not enough free space on this device")
+        }
+        if (offer.kind == V1.KIND_MESSAGE && deliverMessage(offer)) {
+            return x.sendJson(200, OfferAccepted.serializer(), OfferAccepted(offer.id, emptyMap()))
         }
         notify { onOffer(offer) }
         val answered = offer.answered.await(offerTimeoutMs, TimeUnit.MILLISECONDS)

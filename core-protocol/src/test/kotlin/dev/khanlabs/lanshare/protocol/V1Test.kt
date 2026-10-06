@@ -57,6 +57,17 @@ class V1Test {
     }
 
     @Test
+    fun theKindMessageNeedsTextAndNoFiles() {
+        val ok = """"offer":"q3V9xY2kL0aB7cD4eF6gH8""""
+        assertEquals("message", check("""{$ok,"kind":"message","text":"hi"}""").kind)
+        assertEquals("", check("""{$ok,"text":"hi"}""").kind)
+        assertEquals("", check("""{$ok,"kind":"other","text":"hi"}""").kind)
+        assertEquals("", check("""{$ok,"kind":5,"text":"hi"}""").kind)
+        assertEquals("", check("""{$ok,"kind":"message","text":"hi","files":[{"id":"0","name":"a","size":1}]}""").kind)
+        assertEquals("empty", code("""{$ok,"kind":"message"}"""))
+    }
+
+    @Test
     fun badOffersGetTheSameCodesAsWindows() {
         val ok = """"offer":"q3V9xY2kL0aB7cD4eF6gH8""""
         assertEquals("bad_json", assertFailsWith<ProtocolException> { OfferCheck.parseObject("{nope".toByteArray()) }.code)

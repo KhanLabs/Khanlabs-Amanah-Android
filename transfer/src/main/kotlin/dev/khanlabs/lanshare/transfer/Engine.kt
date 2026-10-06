@@ -14,6 +14,8 @@ import android.os.PowerManager
 import android.provider.Settings
 import dev.khanlabs.lanshare.link.Announcement
 import dev.khanlabs.lanshare.link.Discovery
+import dev.khanlabs.lanshare.net.ChatMessage
+import dev.khanlabs.lanshare.net.ChatStore
 import dev.khanlabs.lanshare.net.Clients
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.net.Identity
@@ -99,6 +101,8 @@ data class UiState(
     val conformance: Boolean = false,
     val folder: String = Stores.SHOWN_PATH,
     val history: List<HistoryEntry> = emptyList(),
+    /** Every text in every conversation, oldest first. */
+    val messages: List<ChatMessage> = emptyList(),
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
@@ -129,7 +133,7 @@ object Engine : ReceiverEvents {
     private var receiver: Receiver? = null
     private var listenError: String? = null
     private var discovery: Discovery? = null
-    private var nearby: List<Device> = emptyList()
+    @Volatile private var nearby: List<Device> = emptyList()
     private val added = ArrayList<Device>()
     private val offers = LinkedHashMap<String, Offer>()
     private val jobs = LinkedHashMap<Long, SendJob>()
@@ -141,8 +145,14 @@ object Engine : ReceiverEvents {
     private val prefs by lazy { app.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     // no_backup, like the identity: a restore on another phone must not bring this phone's activity along
     private val history by lazy { History(File(app.noBackupFilesDir, "history.json")) }
+    private val chats by lazy { ChatStore(File(app.noBackupFilesDir, "chats.jsonl")) }
+    /** The conversation on screen right now, so a text for it doesn't also raise a notification. */
+    @Volatile private var viewing: String? = null
 
     val isInitialized: Boolean get() = ::app.isInitialized
+
+    /** Longest message the screens accept: 16,000 characters is at most 64,000 bytes, under the protocol's 64 KB. */
+    const val MAX_MESSAGE_CHARS = 16_000
 
     fun init(context: Context, versionName: String, debug: Boolean) {
         if (isInitialized) return
@@ -204,7 +214,7 @@ object Engine : ReceiverEvents {
             if (receiver != null) return true
             try {
                 val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.default(app) }, this, appLabel,
-                    peeker = SocketPeek)
+                    peeker = SocketPeek, messageTrusted = ::trustsMessage)
                 rx.start()
                 receiver = rx
                 listenError = null
@@ -274,6 +284,13 @@ object Engine : ReceiverEvents {
 
     override fun onFinished(offer: Offer) {
         Notifications.cancelOffer(app, offer.id)
+        if (offer.state == "done" && offer.files.isEmpty() && offer.text.isNotEmpty()) {
+            // a text on its own is a message: it goes into the conversation, not the activity list
+            synchronized(lock) { offers.remove(offer.id) }
+            receiveMessage(offer.sender.id, offer.sender.name, offer.ip, offer.text)
+            refresh()
+            return
+        }
         val v = view(offer)
         if (!conformance && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
             Notifications.received(app, v)
@@ -301,6 +318,108 @@ object Engine : ReceiverEvents {
         created = o.created,
         expiresAt = o.created + V1.OFFER_TIMEOUT_S * 1000,
     )
+
+    // --- messages
+
+    private fun devices(): List<Device> = nearby + synchronized(lock) { added.toList() }
+
+    private fun deviceFor(peer: String): Device? = devices().firstOrNull { it.id == peer }
+
+    /**
+     * A chat text skips the Accept prompt only from a device this phone already talks to, and only from an address that
+     * device announced: the ID in an offer proves nothing (PROTOCOL.md section 7).
+     */
+    private fun trustsMessage(offer: Offer): Boolean {
+        val d = deviceFor(offer.sender.id.uppercase()) ?: return false
+        return chats.knows(d.id) && offer.ip in d.hosts
+    }
+
+    override fun onMessage(offer: Offer) {
+        receiveMessage(offer.sender.id, offer.sender.name, offer.ip, offer.text)
+        refresh()
+    }
+
+    private fun receiveMessage(senderId: String, senderName: String, ip: String, text: String) {
+        val all = devices()
+        val peer = ChatStore.peerOf(senderId, ip, all)
+        val name = (all.firstOrNull { it.id == peer }?.name ?: senderName.ifEmpty { ip }).take(63)
+        val seen = viewing == peer
+        chats.add(peer, name, incoming = true, text, read = seen)
+        if (!seen && !conformance) Notifications.message(app, peer, name, chats.thread(peer))
+    }
+
+    /** The conversation on screen, or null when none is. Opening one marks it read. */
+    fun setViewing(peer: String?) {
+        viewing = peer
+        if (peer != null) markRead(peer)
+    }
+
+    fun markRead(peer: String) {
+        Notifications.cancelMessage(app, peer)
+        if (chats.markRead(peer)) refresh()
+    }
+
+    /** Writes to a device: asks it to accept the first time, then arrives without asking. */
+    fun sendMessage(device: Device, text: String) {
+        val body = text.trim()
+        if (body.isEmpty()) return
+        val m = chats.add(device.id, device.name, incoming = false, body, state = "sending")
+        refresh()
+        deliver(device, m)
+    }
+
+    /** Sends a text that failed or was declined again. */
+    fun retryMessage(id: String) {
+        val m = chats.all.firstOrNull { it.id == id && !it.incoming && (it.state == "failed" || it.state == "declined") } ?: return
+        val d = deviceFor(m.peer)
+        if (d == null) {
+            chats.setState(id, "failed", "Not nearby right now")
+        } else {
+            chats.setState(id, "sending")
+            deliver(d, m)
+        }
+        refresh()
+    }
+
+    /** The Reply button on a message notification. */
+    fun reply(peer: String, text: String) {
+        val body = text.trim().take(MAX_MESSAGE_CHARS)
+        if (body.isEmpty()) return
+        val d = deviceFor(peer)
+        if (d == null) {
+            val name = chats.conversations().firstOrNull { it.peer == peer }?.name ?: ""
+            chats.add(peer, name, incoming = false, body, state = "failed", note = "Not nearby right now")
+        } else {
+            chats.markRead(peer)
+            sendMessage(d, body)
+        }
+        refresh()
+        // posting again is what ends the spinner on the Reply button, and shows the reply in the thread
+        Notifications.message(app, peer, d?.name ?: "", chats.thread(peer), alert = false)
+    }
+
+    fun forgetChat(peer: String) {
+        Notifications.cancelMessage(app, peer)
+        chats.forget(peer)
+        refresh()
+    }
+
+    private fun deliver(device: Device, m: ChatMessage) {
+        if (m.text.toByteArray(Charsets.UTF_8).size > V1.MAX_TEXT) {
+            chats.setState(m.id, "failed", "Too long for a message (64 KB). Send it as a file instead.")
+            return refresh()
+        }
+        val job = SendJob(clients, me(), device, emptyList(), m.text, V1.KIND_MESSAGE) { j ->
+            when (j.state) {
+                SendJob.State.DONE -> chats.setState(m.id, "done")
+                SendJob.State.DECLINED -> chats.setState(m.id, "declined", j.message)
+                SendJob.State.FAILED, SendJob.State.CANCELLED -> chats.setState(m.id, "failed", j.message)
+                else -> {}
+            }
+            refresh()
+        }
+        io.execute { job.run() }
+    }
 
     // --- sending
 
@@ -511,6 +630,7 @@ object Engine : ReceiverEvents {
                 conformanceAllowed = debugBuild,
                 conformance = conformance,
                 history = history.all,
+                messages = chats.all,
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
                 debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )

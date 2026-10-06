@@ -22,6 +22,7 @@ object V1 {
     const val MAX_OFFER_BYTES = 4 * 1024 * 1024
     const val MAX_FILES = 10_000
     const val MAX_TEXT = 64 * 1024
+    const val KIND_MESSAGE = "message"
     const val IDLE_TIMEOUT_S = 60
     const val MAX_CONN_PER_IP = 16
     const val MAX_CONN_TOTAL = 64
@@ -54,7 +55,14 @@ data class Sender(val id: String = "", val name: String = "", val model: String 
 data class OfferFile(val id: String, val name: String, val size: Long)
 
 @Serializable
-data class OfferRequest(val offer: String, val sender: Sender, val files: List<OfferFile> = emptyList(), val text: String? = null)
+data class OfferRequest(
+    val offer: String,
+    val sender: Sender,
+    val files: List<OfferFile> = emptyList(),
+    val text: String? = null,
+    /** "message" for a chat text (PROTOCOL.md 3.2); left out otherwise. */
+    val kind: String? = null,
+)
 
 @Serializable
 data class OfferAccepted(val offer: String, val files: Map<String, String>)
@@ -77,7 +85,14 @@ class ProtocolException(val status: Int, val code: String, message: String) : Ex
 }
 
 /** A checked incoming offer. Names are already cleaned with [Names.cleanRelPath]. */
-data class CheckedOffer(val id: String, val sender: Sender, val files: List<OfferFile>, val text: String) {
+data class CheckedOffer(
+    val id: String,
+    val sender: Sender,
+    val files: List<OfferFile>,
+    val text: String,
+    /** "message" only for text without files that asked for it, else empty. */
+    val kind: String = "",
+) {
     val totalBytes: Long get() = files.sumOf { it.size }
 }
 
@@ -132,7 +147,8 @@ object OfferCheck {
             files += OfferFile(fid, name, size)
         }
         if (files.isEmpty() && text.isEmpty()) throw ProtocolException(400, "empty", "Send at least one file or some text")
-        return CheckedOffer(offerId, sender, files, text)
+        val asked = (data["kind"] as? JsonPrimitive)?.takeIf { it.isString }?.content == V1.KIND_MESSAGE
+        return CheckedOffer(offerId, sender, files, text, if (asked && text.isNotEmpty() && files.isEmpty()) V1.KIND_MESSAGE else "")
     }
 
     /** Python's str() of a JSON value, for the few fields the Windows app converts that way. */

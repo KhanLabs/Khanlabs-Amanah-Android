@@ -10,13 +10,20 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import dev.khanlabs.lanshare.net.ChatMessage
 
 /** The app's notifications: "Ready to receive", incoming sends to accept, and finished sends. */
 object Notifications {
     const val CHANNEL_SERVICE = "service"
     const val CHANNEL_OFFERS = "offers"
     const val CHANNEL_DONE = "done"
+    const val CHANNEL_MESSAGES = "messages"
+    /** Extra on the intent that opens the app on one conversation: the other device's ID. */
+    const val EXTRA_CHAT = "dev.khanlabs.lanshare.CHAT"
+    private const val MESSAGES_SHOWN = 6
     const val SERVICE_ID = 1
 
     fun createChannels(context: Context) {
@@ -32,6 +39,9 @@ object Notifications {
             },
             NotificationChannel(CHANNEL_DONE, "Finished sends", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Files and text you received"
+            },
+            NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Texts from devices you write to"
             },
         ))
     }
@@ -93,6 +103,70 @@ object Notifications {
         } catch (e: SecurityException) {
             // notifications were turned off in the meantime
         }
+    }
+
+    private fun chatTag(peer: String) = "chat:$peer"
+
+    private fun openChat(context: Context, peer: String): PendingIntent {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(EXTRA_CHAT, peer)
+        return PendingIntent.getActivity(context, peer.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** A button on a message notification. The Reply button must be mutable: Android fills the typed text into it. */
+    private fun chatAction(context: Context, action: String, peer: String, code: Int, mutable: Boolean): PendingIntent {
+        val intent = Intent(context, ActionReceiver::class.java).setAction(action).putExtra(ActionReceiver.EXTRA_CHAT, peer)
+        val flag = when {
+            !mutable -> PendingIntent.FLAG_IMMUTABLE
+            Build.VERSION.SDK_INT >= 31 -> PendingIntent.FLAG_MUTABLE
+            else -> 0
+        }
+        return PendingIntent.getBroadcast(context, code, intent, PendingIntent.FLAG_UPDATE_CURRENT or flag)
+    }
+
+    /**
+     * The latest texts of one conversation, with Reply and Mark as read. Posting again replaces the notification;
+     * [alert] false does that quietly (after you replied).
+     */
+    fun message(context: Context, peer: String, name: String, thread: List<ChatMessage>, alert: Boolean = true) {
+        if (!allowed(context)) return
+        val title = name.ifEmpty { thread.lastOrNull { it.name.isNotEmpty() }?.name ?: "Message" }
+        val me = Person.Builder().setName("Me").build()
+        val them = Person.Builder().setName(title).setKey(peer).build()
+        val style = NotificationCompat.MessagingStyle(me)
+        for (m in thread.takeLast(MESSAGES_SHOWN)) style.addMessage(m.text.take(500), m.at, if (m.incoming) them else me)
+        val code = peer.hashCode()
+        val reply = NotificationCompat.Action.Builder(0, "Reply", chatAction(context, ActionReceiver.REPLY, peer, code + 3, mutable = true))
+            .addRemoteInput(RemoteInput.Builder(ActionReceiver.KEY_REPLY).setLabel("Reply").build())
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
+        val read = NotificationCompat.Action.Builder(0, "Mark as read", chatAction(context, ActionReceiver.MARK_READ, peer, code + 4, mutable = false))
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+        val n = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle(title)
+            .setContentText(thread.lastOrNull()?.text?.take(200) ?: "")
+            .setStyle(style)
+            .setContentIntent(openChat(context, peer))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setOnlyAlertOnce(!alert)
+            .setAutoCancel(true)
+            .addAction(reply)
+            .addAction(read)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(chatTag(peer), 0, n)
+        } catch (e: SecurityException) {
+            // notifications were turned off in the meantime
+        }
+    }
+
+    fun cancelMessage(context: Context, peer: String) {
+        NotificationManagerCompat.from(context).cancel(chatTag(peer), 0)
     }
 
     fun cancelOffer(context: Context, offerId: String) {

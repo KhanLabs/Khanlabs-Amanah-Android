@@ -95,6 +95,7 @@ Ask to send files and/or text. **The request stays open until the person answers
 | `sender` | Optional, but the receiver shows `name` and the short ID in the Accept dialog. |
 | `files` | Up to 10,000 entries. `id` is any string up to 64 characters, unique in this offer. `name` is a relative path with `/` between folders. No empty parts, no `.` or `..`, no leading `/`, and every part must be a valid Windows file name (none of `\ / : * ? " < > \|`, no control characters, no trailing dot or space, not a reserved name such as `CON` or `NUL`, at most 255 characters). `size` is the exact size in bytes. |
 | `text` | Optional, at most 64 KB of UTF-8. |
+| `kind` | Optional. `"message"` marks a chat text: no files, only `text`. A receiver that already talks to this device may show it at once without asking (Amanah does this only for a device it already exchanged a message with that went through, and only when the request comes from an address that device announced). Any other receiver ignores the field and asks the person as for any text. |
 
 The offer needs at least one file or some text. The whole JSON body may be up to 4 MB.
 

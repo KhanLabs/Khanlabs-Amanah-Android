@@ -189,7 +189,7 @@ internal fun WhatToSendSheet(d: Device, onChoose: (Kind) -> Unit, onDismiss: () 
         ActionRow(Icons.File, "Files") { onChoose(Kind.Files) }
         ActionRow(Icons.Image, "Photos and videos") { onChoose(Kind.Media) }
         ActionRow(Icons.Folder, "Folder") { onChoose(Kind.Folder) }
-        ActionRow(Icons.Text, "Text") { onChoose(Kind.Text) }
+        ActionRow(Icons.Chat, "Message") { onChoose(Kind.Text) }
     }
 }
 

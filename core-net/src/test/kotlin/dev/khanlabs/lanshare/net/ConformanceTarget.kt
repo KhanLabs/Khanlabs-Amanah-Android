@@ -12,8 +12,17 @@ import java.nio.file.Files
 class ConformanceAnswers : ReceiverEvents {
     lateinit var receiver: Receiver
     val finished = java.util.concurrent.LinkedBlockingQueue<Offer>()
+    /** Chat texts that were delivered without a prompt. */
+    val messages = java.util.concurrent.LinkedBlockingQueue<Offer>()
+    /** Every offer the person would have been asked about. */
+    val asked = java.util.concurrent.LinkedBlockingQueue<Offer>()
+
+    override fun onMessage(offer: Offer) {
+        messages.add(offer)
+    }
 
     override fun onOffer(offer: Offer) {
+        asked.add(offer)
         val name = offer.sender.name
         if ("[wait]" in name) return
         val accept = "[decline]" !in name
@@ -32,11 +41,12 @@ fun startConformanceReceiver(
     identity: Identity = Identity.create("conformance"),
     idleTimeoutMs: Int = 60_000,
     offerTimeoutMs: Long = 120_000,
+    messageTrusted: (Offer) -> Boolean = { false },
 ): Pair<Receiver, ConformanceAnswers> {
     val answers = ConformanceAnswers()
     val rx = Receiver(identity, { ReceiverSettings("Conformance Android", true) }, { FolderStore(inbox) }, answers,
         app = "Amanah Android test", port = port, host = host, idleTimeoutMs = idleTimeoutMs,
-        offerTimeoutMs = offerTimeoutMs)
+        offerTimeoutMs = offerTimeoutMs, messageTrusted = messageTrusted)
     answers.receiver = rx
     rx.start()
     return rx to answers

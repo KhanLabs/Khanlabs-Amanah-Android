@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import dev.khanlabs.lanshare.transfer.Engine
+import dev.khanlabs.lanshare.transfer.Notifications
 import dev.khanlabs.lanshare.transfer.TransferService
 import dev.khanlabs.lanshare.ui.HomeScreen
 import dev.khanlabs.lanshare.ui.LanShareTheme
@@ -26,6 +27,7 @@ import dev.khanlabs.lanshare.ui.WelcomeScreen
 class MainActivity : ComponentActivity() {
     private var shared by mutableStateOf(Shared())
     private var link by mutableStateOf("")  // a klshare:// connect link opened from a camera app
+    private var openChat by mutableStateOf("")  // a message notification was tapped: the other device's ID
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
 
@@ -54,8 +56,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             LanShareTheme {
                 if (welcomed) {
-                    HomeScreen(shared, link, onLinkHandled = { link = "" }, onShareDone = { shared = Shared() },
-                        onReceivingChange = ::setReceiving)
+                    HomeScreen(shared, link, onLinkHandled = { link = "" }, openChat = openChat, onChatHandled = { openChat = "" },
+                        onShareDone = { shared = Shared() }, onReceivingChange = ::setReceiving)
                 } else {
                     WelcomeScreen(permissionNote = permissionNote(), onContinue = {
                         prefs.edit().putBoolean("welcomed", true).apply()
@@ -105,6 +107,10 @@ class MainActivity : ComponentActivity() {
     /** Files or text from another app's Share button, or a connect link from a camera app. */
     private fun readShare(intent: Intent?) {
         intent ?: return
+        intent.getStringExtra(Notifications.EXTRA_CHAT)?.let {
+            openChat = it
+            return
+        }
         if (intent.action == Intent.ACTION_VIEW) {
             intent.data?.let { link = it.toString() }
             return

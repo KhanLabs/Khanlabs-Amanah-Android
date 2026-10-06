@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,7 +81,8 @@ data class Shared(val uris: List<Uri> = emptyList(), val text: String = "", val 
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Send("Send", Icons.Send), Activity("Activity", Icons.Activity), Settings("Settings", Icons.Settings)
+    Send("Send", Icons.Send), Messages("Messages", Icons.Chat), Activity("Activity", Icons.Activity),
+    Settings("Settings", Icons.Settings)
 }
 
 /** Something picked, waiting for a device to be chosen. */
@@ -93,7 +96,16 @@ private class Pending(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareDone: () -> Unit, onReceivingChange: (Boolean) -> Unit) {
+fun HomeScreen(
+    shared: Shared,
+    link: String,
+    onLinkHandled: () -> Unit,
+    /** A message notification was tapped: the other device's ID. */
+    openChat: String,
+    onChatHandled: () -> Unit,
+    onShareDone: () -> Unit,
+    onReceivingChange: (Boolean) -> Unit,
+) {
     val s by Engine.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -112,8 +124,7 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
     var clearOpen by remember { mutableStateOf(false) }
     var detailsFor by remember { mutableStateOf<Device?>(null) }
     var chooseFor by remember { mutableStateOf<Device?>(null) }   // a device was tapped: what to send it?
-    var textFor by remember { mutableStateOf<Device?>(null) }     // compose text for this device
-    var textFirst by remember { mutableStateOf(false) }           // compose text, then pick a device
+    var chatPeer by rememberSaveable { mutableStateOf<String?>(null) }   // the conversation on screen, if any
     var dest by remember { mutableStateOf<Device?>(null) }        // the device a running pick will go to, if known
     var pending by remember { mutableStateOf<Pending?>(null) }
     var reading by remember { mutableStateOf(false) }
@@ -154,7 +165,11 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
             Kind.Files -> pickFiles.launch(arrayOf("*/*"))
             Kind.Media -> pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             Kind.Folder -> pickFolder.launch(null)
-            Kind.Text -> if (dest != null) { textFor = dest; dest = null } else textFirst = true
+            Kind.Text -> {
+                val d = dest
+                dest = null
+                if (d != null) chatPeer = d.id else tab = Tab.Messages
+            }
         }
     }
 
@@ -163,6 +178,7 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
         if (shared.isEmpty && shared.deviceId.isEmpty()) return@LaunchedEffect
         tab = Tab.Send
         aboutOpen = false
+        chatPeer = null
         val content = Pending(
             if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
             uris = shared.uris, text = shared.text, fromShare = true,
@@ -203,6 +219,15 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
         if (code == null) connectMsg = "That QR code is not from Amanah." else connect(code)
     }
 
+    // a message notification was tapped: open that conversation
+    LaunchedEffect(openChat) {
+        if (openChat.isNotEmpty()) {
+            chatPeer = openChat
+            aboutOpen = false
+            onChatHandled()
+        }
+    }
+
     // a connect link opened from the phone's camera app: ask before adding anything
     LaunchedEffect(link) {
         if (link.isNotEmpty()) {
@@ -216,7 +241,11 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
         pending = null
     }
 
-    if (aboutOpen) {
+    val openThread = chatPeer
+    if (openThread != null) {
+        BackHandler { chatPeer = null }
+        ThreadScreen(openThread, s, onBack = { chatPeer = null })
+    } else if (aboutOpen) {
         BackHandler { aboutOpen = false }
         AboutScreen(onBack = { aboutOpen = false })
     } else {
@@ -234,9 +263,18 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
                     val d = LocalDensity.current
                     CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
                         NavigationBar(Modifier.height(64.dp), windowInsets = WindowInsets(0, 0, 0, 0)) {
+                            val unread = s.messages.count { !it.read }
                             for (t in Tab.entries) NavigationBarItem(
                                 selected = tab == t, onClick = { tab = t }, alwaysShowLabel = true,
-                                icon = { Icon(t.icon, contentDescription = null) },
+                                icon = {
+                                    if (t == Tab.Messages && unread > 0) {
+                                        BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else unread.toString()) } }) {
+                                            Icon(t.icon, contentDescription = "${t.label}, $unread unread")
+                                        }
+                                    } else {
+                                        Icon(t.icon, contentDescription = null)
+                                    }
+                                },
                                 label = { Text(t.label, maxLines = 1) },
                             )
                         }
@@ -256,6 +294,7 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
                         onAddByIp = { addOpen = true },
                         onHelp = { helpOpen = true },
                     )
+                    Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
                     Tab.Activity -> ActivityTab(s.history)
                     Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { clearOpen = true }, { aboutOpen = true })
                 }
@@ -285,10 +324,6 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
         DeviceSheet(d, added = s.added.any { it.id == d.id }, onForget = { Engine.forget(d); detailsFor = null }, onDismiss = { detailsFor = null })
     }
 
-    textFor?.let { d ->
-        TextDialog("Text to ${d.name}", onDone = { textFor = null }) { text -> Engine.send(d, emptyList(), text) }
-    }
-    if (textFirst) TextDialog("Send text", onDone = { textFirst = false }, sendLabel = "Next") { text -> pending = Pending("text", text = text) }
     if (addOpen) AddByIpDialog(onDone = { addOpen = false })
     if (scanOpen) ScanScreen(onCode = ::scanned, onAddByIp = { scanOpen = false; addOpen = true }, onDismiss = { scanOpen = false })
     if (connecting) AlertDialog(
@@ -373,20 +408,6 @@ private fun ReceivingChip(s: UiState, onClick: () -> Unit) {
 }
 
 // --- dialogs
-
-@Composable
-private fun TextDialog(title: String, onDone: () -> Unit, sendLabel: String = "Send", onSend: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDone,
-        title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it.take(20_000) }, Modifier.fillMaxWidth(), minLines = 3) },
-        confirmButton = {
-            Button(onClick = { onSend(text); onDone() }, enabled = text.isNotBlank()) { Text(sendLabel) }
-        },
-        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
-    )
-}
 
 @Composable
 private fun AddByIpDialog(onDone: () -> Unit) {

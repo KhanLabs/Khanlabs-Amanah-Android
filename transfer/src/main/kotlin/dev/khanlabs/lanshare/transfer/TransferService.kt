@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
+import androidx.core.app.RemoteInput
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -76,11 +77,18 @@ class TransferService : Service() {
     }
 }
 
-/** Buttons on the notifications: Accept, Decline, Copy text. */
+/** Buttons on the notifications: Accept, Decline, Copy text, and Reply and Mark as read on messages. */
 class ActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val offerId = intent.getStringExtra(EXTRA_OFFER) ?: return
         if (!Engine.isInitialized) return
+        intent.getStringExtra(EXTRA_CHAT)?.let { peer ->
+            when (intent.action) {
+                REPLY -> RemoteInput.getResultsFromIntent(intent)?.getCharSequence(KEY_REPLY)?.let { Engine.reply(peer, it.toString()) }
+                MARK_READ -> Engine.markRead(peer)
+            }
+            return
+        }
+        val offerId = intent.getStringExtra(EXTRA_OFFER) ?: return
         when (intent.action) {
             ACCEPT -> Engine.answer(offerId, true)
             DECLINE -> Engine.answer(offerId, false)
@@ -97,6 +105,10 @@ class ActionReceiver : BroadcastReceiver() {
         const val ACCEPT = "dev.khanlabs.lanshare.ACCEPT"
         const val DECLINE = "dev.khanlabs.lanshare.DECLINE"
         const val COPY = "dev.khanlabs.lanshare.COPY"
+        const val REPLY = "dev.khanlabs.lanshare.REPLY"
+        const val MARK_READ = "dev.khanlabs.lanshare.MARK_READ"
         const val EXTRA_OFFER = "offer"
+        const val EXTRA_CHAT = "chat"
+        const val KEY_REPLY = "reply"
     }
 }
