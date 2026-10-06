@@ -50,20 +50,38 @@ class Exchange internal constructor(
         if (headers.containsKey("transfer-encoding")) null
         else headers["content-length"]?.trim()?.toLongOrNull()?.takeIf { it >= 0 }
 
-    fun send(status: Int, contentType: String, body: ByteArray, extra: Map<String, String> = emptyMap()) {
+    /** With [headOnly] the answer to a HEAD request: the headers (with the real length), no body. */
+    fun send(status: Int, contentType: String, body: ByteArray, extra: Map<String, String> = emptyMap(),
+             headOnly: Boolean = false) {
         answered = true
+        writeHead(status, contentType, body.size.toLong(), extra)
+        if (!headOnly) out.write(body)
+        out.flush()
+    }
+
+    /**
+     * Sends the headers with an exact Content-Length, then lets [writeBody] write that many bytes straight to the
+     * connection. An exception from [writeBody] (the other side left, a file shrank) ends the connection short.
+     */
+    fun sendStream(status: Int, contentType: String, length: Long, extra: Map<String, String> = emptyMap(),
+                   headOnly: Boolean = false, writeBody: (OutputStream) -> Unit) {
+        answered = true
+        writeHead(status, contentType, length, extra)
+        if (!headOnly) writeBody(out)
+        out.flush()
+    }
+
+    private fun writeHead(status: Int, contentType: String, length: Long, extra: Map<String, String>) {
         val head = StringBuilder()
             .append("HTTP/1.1 ").append(status).append(' ').append(reason(status)).append("\r\n")
             .append("Content-Type: ").append(contentType).append("\r\n")
-            .append("Content-Length: ").append(body.size).append("\r\n")
+            .append("Content-Length: ").append(length).append("\r\n")
             .append("Cache-Control: no-store\r\n")
             .append("X-Content-Type-Options: nosniff\r\n")
             .append("Connection: close\r\n")
         for ((k, v) in extra) head.append(k).append(": ").append(v).append("\r\n")
         head.append("\r\n")
         out.write(head.toString().toByteArray(Charsets.ISO_8859_1))
-        out.write(body)
-        out.flush()
     }
 
     fun sendJson(status: Int, json: String) = send(status, "application/json", json.toByteArray(Charsets.UTF_8))
@@ -102,7 +120,9 @@ class Exchange internal constructor(
         fun reason(status: Int): String = when (status) {
             200 -> "OK"
             201 -> "Created"
+            206 -> "Partial Content"
             301 -> "Moved Permanently"
+            303 -> "See Other"
             400 -> "Bad Request"
             403 -> "Forbidden"
             404 -> "Not Found"
@@ -112,6 +132,7 @@ class Exchange internal constructor(
             410 -> "Gone"
             411 -> "Length Required"
             413 -> "Content Too Large"
+            416 -> "Range Not Satisfiable"
             421 -> "Misdirected Request"
             429 -> "Too Many Requests"
             431 -> "Request Header Fields Too Large"
@@ -138,7 +159,8 @@ fun interface Peeker {
  * which the JDK has but Android's TLS does not. With [peekPlainHttp] off, every connection is treated as TLS.
  */
 class HttpsServer(
-    private val tls: SSLContext,
+    /** The TLS settings, or null for a plain-HTTP server that hangs up on anything that starts like TLS. */
+    private val tls: SSLContext?,
     private val handler: (Exchange) -> Unit,
     host: InetAddress? = null,
     firstPort: Int,
@@ -170,6 +192,11 @@ class HttpsServer(
         closeQuietly(server)
         synchronized(open) { open.toList() }.forEach { closeQuietly(it) }
         pool.shutdownNow()
+    }
+
+    /** Drops every connection that is open now (downloads in progress) and keeps listening. */
+    fun cutConnections() {
+        synchronized(open) { open.toList() }.forEach { closeQuietly(it) }
     }
 
     private fun acceptLoop() {
@@ -217,9 +244,27 @@ class HttpsServer(
         if (n > 0) counts[ip] = n else counts.remove(ip)
     }
 
+    /** Plain HTTP, for a server with no TLS: the same request handling, and a TLS hello gets no answer. */
+    private fun servePlain(s: Socket, ip: String) {
+        val input = BufferedInputStream(s.getInputStream(), 64 * 1024)
+        input.mark(1)
+        val first = input.read()
+        if (first < 0 || first == TLS_HANDSHAKE) return
+        input.reset()
+        s.soTimeout = idleTimeoutMs
+        val output = BufferedOutputStream(s.getOutputStream(), 64 * 1024)
+        val exchange = readRequest(input, output, ip) ?: return
+        handler(exchange)
+        if (!exchange.answered) exchange.fail(500, "failed", "No answer")
+        output.flush()
+        if (!exchange.bodyRead) exchange.drain()
+        s.close()
+    }
+
     private fun serve(s: Socket, ip: String) {
         s.tcpNoDelay = true
         s.soTimeout = HANDSHAKE_TIMEOUT_MS
+        if (tls == null) return servePlain(s, ip)
         val factory = tls.socketFactory
         val secure: SSLSocket = when {
             !peekPlainHttp -> factory.createSocket(s, ip, s.port, true) as SSLSocket

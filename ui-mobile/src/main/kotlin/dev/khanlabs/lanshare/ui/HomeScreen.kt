@@ -112,6 +112,7 @@ fun HomeScreen(
 
     var tab by rememberSaveable { mutableStateOf(Tab.Send) }
     var aboutOpen by rememberSaveable { mutableStateOf(false) }
+    var shareOpen by rememberSaveable { mutableStateOf(false) }  // the Share to anyone screen
     var receivingOpen by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     var addOpen by remember { mutableStateOf(false) }
@@ -178,6 +179,7 @@ fun HomeScreen(
         if (shared.isEmpty && shared.deviceId.isEmpty()) return@LaunchedEffect
         tab = Tab.Send
         aboutOpen = false
+        shareOpen = false
         chatPeer = null
         val content = Pending(
             if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
@@ -224,6 +226,7 @@ fun HomeScreen(
         if (openChat.isNotEmpty()) {
             chatPeer = openChat
             aboutOpen = false
+            shareOpen = false
             onChatHandled()
         }
     }
@@ -245,6 +248,9 @@ fun HomeScreen(
     if (openThread != null) {
         BackHandler { chatPeer = null }
         ThreadScreen(openThread, s, onBack = { chatPeer = null })
+    } else if (shareOpen) {
+        BackHandler { shareOpen = false }
+        ShareScreen(s, onBack = { shareOpen = false })
     } else if (aboutOpen) {
         BackHandler { aboutOpen = false }
         AboutScreen(onBack = { aboutOpen = false })
@@ -293,6 +299,7 @@ fun HomeScreen(
                         onScan = { scanOpen = true },
                         onAddByIp = { addOpen = true },
                         onHelp = { helpOpen = true },
+                        onShareAnyone = { shareOpen = true },
                     )
                     Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
                     Tab.Activity -> ActivityTab(s.history)

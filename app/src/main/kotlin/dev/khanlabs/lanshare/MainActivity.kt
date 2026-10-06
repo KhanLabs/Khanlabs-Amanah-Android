@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setReceiving(on: Boolean) {
         Engine.setReceiving(on)
-        if (on) TransferService.start(this) else TransferService.stop(this)
+        TransferService.sync(this)
     }
 
     /** Files or text from another app's Share button, or a connect link from a camera app. */

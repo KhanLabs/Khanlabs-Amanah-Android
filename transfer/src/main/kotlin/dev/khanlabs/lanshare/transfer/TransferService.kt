@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps the receiver running while the app is in the background, with a "Ready to receive" notification.
- * It runs while receiving is on; turning receiving off stops it.
+ * It runs while receiving is on or a share to anyone is live; when both end it stops.
  */
 class TransferService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -34,10 +34,13 @@ class TransferService : Service() {
         super.onCreate()
         Notifications.createChannels(this)
         goForeground("Starting")
+        if (!Engine.receiving && !Engine.sharing) return stopSelf() // restarted by Android with nothing to do
         Thread { Engine.startReceiving() }.start()
         scope.launch {
             Engine.state.map { s ->
+                val share = s.share
                 when {
+                    share != null && share.live -> "Sharing ${share.items} ${if (share.items == 1) "item" else "items"} on this Wi-Fi"
                     s.listenError != null -> s.listenError
                     s.port == null -> "Starting"
                     !s.receiving -> "Receiving is off"
@@ -53,7 +56,11 @@ class TransferService : Service() {
         ServiceCompat.startForeground(this, Notifications.SERVICE_ID, Notifications.service(this, text), type)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // receiving may have been switched on while the service was already running for a share
+        Thread { Engine.startReceiving() }.start()
+        return START_STICKY
+    }
 
     /** Android 15 limits dataSync services to 6 hours a day. */
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -63,6 +70,7 @@ class TransferService : Service() {
     override fun onDestroy() {
         scope.cancel()
         Engine.stopReceiving()
+        Engine.shareServiceGone()
         super.onDestroy()
     }
 
@@ -73,6 +81,11 @@ class TransferService : Service() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, TransferService::class.java))
+        }
+
+        /** Runs the service while receiving is on or a share is live, and stops it otherwise. Call from the screen. */
+        fun sync(context: Context) {
+            if (Engine.receiving || Engine.sharing) start(context) else stop(context)
         }
     }
 }

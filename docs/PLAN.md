@@ -233,7 +233,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 |---|---|---|---|---|---|
 | 60 | "Made with ♥ by Khan" footer | Done (contrast fix needed, section 4.2) | Partly: built and pinned; not yet tested at 200% font and 320 dp | Not started | Fix in R2, tests in R1, TV in R8 |
 | 61 | Footer on the folder share web page | Done (light theme fix needed) | n/a | n/a | R2 |
-| 62 | Footer on the Share to anyone page | Not started | Not started | n/a | R7 |
+| 62 | Footer on the Share to anyone page | Done | Done (page checked in a browser) | n/a | R7 |
 | 63 | About screen: version, brand line, promises, tip card | Done | Done | Not started | Done; wording "one-time tip" in R2 |
 | 64 | Tip page on khanlabs.dev (card, bank, crypto) | n/a (website) | n/a (website) | n/a | R10 (low priority) |
 | 65 | Play build without the tip card | n/a | Not started | Not started | R10 |
@@ -247,8 +247,8 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 68 | Fix: notepad save accepts requests from other sites (CSRF) | Not started | n/a | n/a | R2 |
 | 69 | Fix: PIN lockout is per IP only; add a cap for all IPs | Not started | n/a | n/a | R2 |
 | 70 | Fix: "Download all" zip has no length, so a cut download can look complete | Not started | n/a | n/a | R2 |
-| 71 | Share to anyone: pick files, QR and link screen | Not started (prototype only) | Not started | Not started | R7; TV later |
-| 72 | Share to anyone page: grouped files, thumbnails, Download all, Range, PIN, time limit | Not started (prototype only) | Not started | n/a | R7 |
+| 71 | Share to anyone: pick files, QR and link screen | Done | Built, not yet run on the phone | Not started | R7; TV later |
+| 72 | Share to anyone page: grouped files, Download all, Range, PIN, time limit (no thumbnails: the page has no scripts) | Done | Done (tested over sockets) | n/a | R7 |
 | 73 | Web page uploads with v2 chunks (resumable uploads from iPhones) | Not started | n/a | n/a | R10 (nice to have) |
 
 ### 3.8 TV, direct mode and distribution
@@ -769,7 +769,7 @@ The sender's screen says: "If the browser warns, tap Continue or Keep. The files
 
 **Order (changed 2026-10-06):** UI and features first (R6 and R7, and the UI parts of R2), then reliability (R1 to R5), then R8 to R10. The phase numbers stay the same so that old notes still match. Nothing is released to the public until R5's gates pass, so features built first are private builds only. When a feature is built before its reliability phase, its tests are written in R1 and run in R5 before release. Patch releases of safety fixes for the existing Windows 1.2.x are allowed if they pass the v1 gates.
 
-**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide. Added later the same day: the first-run screen, QR connect in both directions (`klshare://connect`, local addresses only, full ID pinned), links from a camera app, a Quick Settings tile, devices in the Share menu and the app icon menu, and photo previews in Activity. Still to build in this stretch: the Windows UI changes and Share to anyone.
+**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide. Added later the same day: the first-run screen, QR connect in both directions (`klshare://connect`, local addresses only, full ID pinned), links from a camera app, a Quick Settings tile, devices in the Share menu and the app icon menu, and photo previews in Activity. Added on 2026-10-06 (later): Share to anyone on both apps. Still to build in this stretch: the Windows UI changes, and Own Wi-Fi (section 5.9).
 
 | Phase | What | Apps | Working days | Release |
 |---|---|---|---|---|

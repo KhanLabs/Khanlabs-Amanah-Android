@@ -31,7 +31,7 @@ import dev.khanlabs.lanshare.protocol.DeviceId
 
 /** A QR code for [text]. Always black on white, in the dark theme too: scanners need that contrast. */
 @Composable
-internal fun QrCode(text: String, modifier: Modifier = Modifier) {
+internal fun QrCode(text: String, modifier: Modifier = Modifier, description: String = "QR code to connect to this device") {
     val matrix = remember(text) {
         QRCodeWriter().encode(
             text, BarcodeFormat.QR_CODE, 0, 0,
@@ -41,7 +41,7 @@ internal fun QrCode(text: String, modifier: Modifier = Modifier) {
     val quiet = 3 // empty modules around the code
     Canvas(
         modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(Color.White)
-            .semantics { contentDescription = "QR code to connect to this device" },
+            .semantics { contentDescription = description },
     ) {
         val cell = size.width / (matrix.width + 2 * quiet)
         for (y in 0 until matrix.height) for (x in 0 until matrix.width) {

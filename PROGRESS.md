@@ -13,7 +13,8 @@ The plan is `docs/PLAN.md` (rewritten 2026-10-06). The work order was changed on
 - **Done 2026-10-06 (later):** phone UI overhaul (commit `0047500`): Send, Activity and Settings tabs, Receiving chip and sheet, folder send, offer countdown, activity history. Tested on the OnePlus 8T, including 200% text and 320 dp wide.
 - **Done 2026-10-06 (UI first, part 2):** first-run screen with a one-time permission request, a warning when notifications are off, QR connect (phone shows and scans codes, the PC shows a code), `klshare://` links from a camera app, a Quick Settings tile, devices in other apps' Share menu and the app icon menu, photo previews in Activity, and a fix for the offer sheet at 320 dp and 200%.
 - **Done 2026-10-06 (messages):** the Text button became **Messages**. A Messages tab lists conversations (unread count on the tab), and a conversation screen shows your texts and theirs with a box to reply. A text arrives without a prompt only from a device you already exchanged a message with that went through, and only from an address that device announced. Notification has Reply and Mark as read. Code: `ChatStore` in `core-net`, `Engine.sendMessage/reply`, `MessagesTab.kt`; protocol field `kind:"message"`. 53 Kotlin tests pass. Not yet tried on the phone (no USB connection).
-- **Next:** a real-camera QR scan (needs the owner to aim the phone at the PC screen); then the Windows UI changes; then Share to anyone (R7). After that, the reliability phases R1 to R5.
+- **Done 2026-10-06 (Share to anyone):** a person without Amanah scans a QR code and gets a web page with only the files you picked (details in the Log). Code: `ShareServer`, `ShareServerTest`, `ZipPlan`, `SharePage` in `core-net`, `Engine.startShare/stopShare`, `ShareScreen.kt`. 78 Kotlin tests pass (23 protocol, 55 net). The page was checked in a browser at phone width (light and dark). **Not tried on the phone yet** (no USB connection): the screen, the notification, the service, the time limit ending on its own, and a real second phone scanning the code.
+- **Next:** Own Wi-Fi when there is no network (section 5.9 of the plan); a real-camera QR scan; the Windows UI changes; then the reliability phases R1 to R5.
 
 ## Phase 2: phone app
 
@@ -43,11 +44,13 @@ Sending and receiving:
 - [ ] User-initiated jobs (API 34+) or a foreground service; wake lock and `WifiLock` (foreground service and locks done; user-initiated jobs not started)
 - [ ] Progress with speed and time remaining; history; text messages (all but history done)
 
-Share to anyone (`docs/PLAN.md`, section 5.8; moved to R7, after the first public release):
-- [ ] Pick files, then a screen with the device name, count, size, QR code and link
-- [ ] Browser page: Download all (.zip made while sending), files grouped by type, photo thumbnails
-- [ ] Secret link, optional PIN, the share ends when the screen closes or after a time limit
-- [ ] Works in Chrome, Safari on iPhone, Firefox, Samsung Internet and Brave
+Share to anyone (`docs/PLAN.md`, section 5.8; brought forward on 2026-10-06 at the owner's request):
+- [x] Pick files, folders or photos, then a screen with the QR code, link, PIN, live counts and Stop
+- [x] Browser page: Download everything as one ZIP (made while sending, exact length), a ZIP per folder, resume for single files; no photo thumbnails (the page has no scripts)
+- [x] Secret link, optional PIN with lockout, a time limit (15 min, 1 h, 4 h, until stopped); Stop cuts downloads
+- [x] "Get Amanah" card on the page: this phone's own APK and an "Open in Amanah" link
+- [ ] Tried on the phone and with a second phone
+- [ ] Works in Chrome, Safari on iPhone, Firefox, Samsung Internet and Brave (plain HTML and CSS, but only Chromium was looked at)
 
 Nice to have:
 - [ ] Clipboard push to trusted devices
@@ -154,6 +157,15 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-06 (Share to anyone, Android)
+- Same behaviour as the Windows app (`anyone.py`): plain HTTP on its own port (47890, next 9 tried) at `/s/<random 128-bit token>/`; a wrong token or any other path gets the same 404; optional 6-digit PIN (5 free tries per address, then a lock that doubles up to 15 minutes; 20 wrong tries from anywhere in 10 minutes lock everything for 15 minutes); a TLS hello is hung up on; the Host header must be an IP address; the page has no scripts and a strict Content-Security-Policy; the token is never logged. When it ends, the address says "This share has ended" for 5 minutes.
+- `HttpsServer` can now run without TLS (`tls = null`) and `Exchange` can stream a body of a known length. The 53 older tests still pass.
+- `ZipPlan` writes a stored ZIP whose length is known before the first byte, with ZIP64 past 4 GB or 65,535 entries. Checked with `java.util.zip.ZipFile`, with lowered limits to reach the ZIP64 forms. A file that changes size while it is sent cuts the ZIP short, so the browser shows a failed download instead of a broken file.
+- The service now runs while receiving is on **or** a share is live. With receiving off and a share live, the phone does not listen on the protocol port and does not announce itself. Android 15 allows only 6 hours a day for this kind of service; when it times out the share ends.
+- The page offers this app's own APK from `applicationInfo.sourceDir`. That works for a sideloaded or debug build; an install split into several files (Play) is detected and the card is left out. Decide before the Play release.
+- Checked: 25 new tests over real sockets (listing, 404 sameness, Range, HEAD, ZIPs, Host check, TLS hello, PIN, lockout, stop cuts a running download, time limit, counts, installer card, grouping of names). Page screenshots at 390 px wide, light and dark (Playwright Chromium).
+- Not checked: anything on the phone. No USB connection this session, so the Compose screen, the notification text, the foreground service start and stop, and the share ending by itself have only been compiled, not run.
 
 ### 2026-10-06 (rename to Amanah)
 - The owner chose the name **Amanah** ("something entrusted to your care"), shown with "File sharing by KhanLabs". The app label, top bar, welcome screen, About screen, messages and the `app` text sent to other devices say Amanah now.

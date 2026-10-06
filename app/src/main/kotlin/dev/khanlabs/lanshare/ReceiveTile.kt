@@ -13,7 +13,7 @@ class ReceiveTile : TileService() {
     override fun onClick() {
         val on = !Engine.receiving
         Engine.setReceiving(on)
-        if (on) TransferService.start(this) else TransferService.stop(this)
+        TransferService.sync(this)
         paint()
     }
 

@@ -27,6 +27,8 @@ import dev.khanlabs.lanshare.net.ReceiverEvents
 import dev.khanlabs.lanshare.net.ReceiverSettings
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.SendJob
+import dev.khanlabs.lanshare.net.ShareDownload
+import dev.khanlabs.lanshare.net.ShareServer
 import dev.khanlabs.lanshare.net.fetchInfo
 import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
@@ -45,6 +47,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.io.File
+import java.io.FileInputStream
+import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -84,6 +88,24 @@ data class OutgoingView(
     val text: String,
 )
 
+/** The share to someone without Amanah, as the screens show it. Null in [UiState.share] when none is set up. */
+data class ShareView(
+    /** The address in the QR code. Empty when the phone has no Wi-Fi address right now. */
+    val url: String,
+    val pin: String?,
+    /** Files and folders on the page. */
+    val items: Int,
+    val bytes: Long,
+    val live: Boolean,
+    val visitors: Int,
+    val downloads: Int,
+    val sent: Long,
+    /** When the time limit runs out, in milliseconds since 1970; null means until it is stopped. */
+    val endsAt: Long?,
+    /** The page offers Amanah for Android. */
+    val installer: Boolean,
+)
+
 data class UiState(
     val name: String = "",
     val receiving: Boolean = true,
@@ -103,6 +125,7 @@ data class UiState(
     val history: List<HistoryEntry> = emptyList(),
     /** Every text in every conversation, oldest first. */
     val messages: List<ChatMessage> = emptyList(),
+    val share: ShareView? = null,
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
@@ -141,6 +164,9 @@ object Engine : ReceiverEvents {
     private var conformance = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private var share: ShareServer? = null
+    private var shareEndsAt: Long? = null
+    @Volatile private var shareWasLive = false
 
     private val prefs by lazy { app.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     // no_backup, like the identity: a restore on another phone must not bring this phone's activity along
@@ -186,8 +212,13 @@ object Engine : ReceiverEvents {
 
     fun setReceiving(on: Boolean) {
         prefs.edit().putBoolean("receiving", on).apply()
+        // The service may keep running for a share; the receiver itself follows this switch.
+        if (!on) stopReceiving()
         refresh()
     }
+
+    /** True while a share to anyone is handing files out. */
+    val sharing: Boolean get() = synchronized(lock) { share }?.live() == true
 
     /** Debug builds only: scales text so large-font layouts can be tested on phones that won't change the system size. */
     fun setDebugFontScale(scale: Float) {
@@ -210,6 +241,7 @@ object Engine : ReceiverEvents {
 
     /** Starts the receiver and the announcement. Call from a worker thread. Returns false if no port was free. */
     fun startReceiving(): Boolean {
+        if (!receiving) return true // the service may be running only for a share
         synchronized(lock) {
             if (receiver != null) return true
             try {
@@ -243,7 +275,8 @@ object Engine : ReceiverEvents {
     }
 
     private fun announce() {
-        val rx = receiver ?: return
+        val rx = receiver
+        if (rx == null || !receiving) return
         discovery?.announce(Announcement(identity.id, name, rx.port, appLabel))
     }
 
@@ -583,6 +616,79 @@ object Engine : ReceiverEvents {
         }
     }
 
+    // --- share to anyone
+
+    /** The address a phone on this Wi-Fi would use, or null when this phone has none. */
+    private fun shareHost(): String? = addresses.firstOrNull { ConnectCode.isLocalAddress(it) }
+
+    /** Amanah for Android itself, offered on the page. Not offered when Android split the install into several files. */
+    private fun shareDownloads(): List<ShareDownload> {
+        val info = app.applicationInfo
+        val apk = File(info.sourceDir)
+        if (!apk.isFile || !info.splitSourceDirs.isNullOrEmpty()) return emptyList()
+        return listOf(ShareDownload("Amanah for Android", "Amanah.apk", apk.length()) { FileInputStream(apk) })
+    }
+
+    /**
+     * Starts handing [items] to anyone who scans the QR code. [minutes] 0 means until stopped. Calls back on the main
+     * thread with null, or a message the screen shows.
+     */
+    fun startShare(items: List<SendItem>, usePin: Boolean, minutes: Int, onResult: (String?) -> Unit) {
+        io.execute {
+            val error = try {
+                when {
+                    items.isEmpty() -> "Pick something to share first."
+                    synchronized(lock) { share != null } -> "Something is already being shared. Stop it first."
+                    shareHost() == null -> "Connect to Wi-Fi first. People can only open this on the same Wi-Fi."
+                    else -> {
+                        val pin = if (usePin) "%06d".format(SecureRandom().nextInt(1_000_000)) else null
+                        val link = if (receiving) myCode()?.toText().orEmpty() else ""
+                        val s = ShareServer(items, pin, minutes, shareDownloads(), link, appLabel, onChange = ::refresh)
+                        try {
+                            s.start()
+                        } catch (e: Exception) {
+                            s.close()
+                            throw e
+                        }
+                        synchronized(lock) {
+                            share = s
+                            shareEndsAt = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else null
+                        }
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                "Couldn't start sharing: ${e.message}"
+            }
+            refresh()
+            if (error == null) main.post { TransferService.start(app) }
+            main.post { onResult(error) }
+        }
+    }
+
+    /** Ends the share and clears it from the screen. Downloads in progress are cut; the address then says it has ended. */
+    fun stopShare() {
+        val s = synchronized(lock) { share.also { share = null; shareEndsAt = null } } ?: return
+        io.execute { s.end() }
+        refresh()
+    }
+
+    /** The service is going away: nothing can be served after this. A share that already ended on its own stays on screen. */
+    fun shareServiceGone() {
+        val s = synchronized(lock) { share } ?: return
+        if (s.live()) stopShare()
+    }
+
+    private fun shareView(): ShareView? {
+        val s = share ?: return null
+        val st = s.stats()
+        return ShareView(
+            url = shareHost()?.let { s.url(it) }.orEmpty(), pin = s.pin, items = s.itemCount, bytes = s.totalBytes,
+            live = st.live, visitors = st.visitors, downloads = st.downloads, sent = st.bytes, endsAt = shareEndsAt,
+            installer = s.hasInstaller,
+        )
+    }
+
     // --- state
 
     private fun watchNetwork() {
@@ -631,18 +737,22 @@ object Engine : ReceiverEvents {
                 conformance = conformance,
                 history = history.all,
                 messages = chats.all,
+                share = shareView(),
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
                 debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )
         }
         _state.value = snapshot
         holdLocks(snapshot)
+        val live = snapshot.share?.live == true
+        if (shareWasLive && !live && !receiving) main.post { TransferService.stop(app) } // nothing left for the service to do
+        shareWasLive = live
     }
 
     /** Keeps the CPU and Wi-Fi awake while something is moving, so a send survives the screen turning off. */
     @Suppress("DEPRECATION")
     private fun holdLocks(s: UiState) {
-        val busy = s.incoming.any { it.state == "accepted" } ||
+        val busy = s.share?.live == true || s.incoming.any { it.state == "accepted" } ||
             s.outgoing.any { it.state == SendJob.State.SENDING || it.state == SendJob.State.WAITING }
         synchronized(this) {
             if (busy && wakeLock == null) {
