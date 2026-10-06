@@ -141,7 +141,7 @@ object Engine : ReceiverEvents {
         // no_backup: a phone restored from a backup must not get this phone's device ID
         identity = Identity.loadOrCreate(File(app.noBackupFilesDir, "identity"), "Android")
         loadAdded()
-        discovery = Discovery(app, identity.id) { found -> nearby = found; refresh() }
+        discovery = Discovery(app, identity.id, ::answers) { found -> nearby = found; refresh() }
         watchNetwork()
         addresses = Discovery.lanAddresses()
         refresh()
@@ -296,6 +296,16 @@ object Engine : ReceiverEvents {
     fun dismissSend(key: Long) {
         synchronized(lock) { jobs.remove(key) }
         refresh()
+    }
+
+    /** True if the device answers on one of its addresses with the same ID. Blocks for up to 3 s per address. */
+    private fun answers(device: Device): Boolean = device.hosts.any { host ->
+        try {
+            fetchInfo(clients, host, device.port, device.id, timeoutS = 3)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /** "Add by IP": asks the address who it is, then keeps the device. Calls back on the main thread. */

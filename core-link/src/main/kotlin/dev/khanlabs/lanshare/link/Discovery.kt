@@ -7,6 +7,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.V1
@@ -20,8 +21,17 @@ data class Announcement(val id: String, val name: String, val port: Int, val app
 /**
  * DNS-SD with NsdManager: announces this device and finds others offering `_klshare._tcp`.
  * Every callback from here arrives on the main thread.
+ *
+ * [stillThere] asks a device directly whether it is still reachable. It runs on a worker thread when Android
+ * reports a device as lost, because Android 14 on a OnePlus 8T reported the Windows app as lost every few minutes
+ * while it was still running, and found it again a little later.
  */
-class Discovery(context: Context, private val ownId: String, private val onChange: (List<Device>) -> Unit) {
+class Discovery(
+    context: Context,
+    private val ownId: String,
+    private val stillThere: (Device) -> Boolean,
+    private val onChange: (List<Device>) -> Unit,
+) {
     private val app = context.applicationContext
     private val nsd = app.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val wifi = app.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -95,16 +105,33 @@ class Discovery(context: Context, private val ownId: String, private val onChang
             override fun onDiscoveryStarted(serviceType: String) {}
             override fun onDiscoveryStopped(serviceType: String) {}
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                Log.w(TAG, "discovery failed to start: $errorCode")
                 main.post { if (discovery === this) discovery = null }
             }
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
             override fun onServiceFound(info: NsdServiceInfo) {
+                Log.d(TAG, "found ${info.serviceName}")
                 main.post { queue.addLast(info); resolveNext() }
             }
             override fun onServiceLost(info: NsdServiceInfo) {
+                Log.d(TAG, "lost ${info.serviceName}")
                 main.post {
                     queue.removeAll { it.serviceName == info.serviceName }
-                    if (found.remove(info.serviceName) != null) publish()
+                    val d = found[info.serviceName] ?: return@post
+                    Thread({
+                        val alive = try {
+                            stillThere(d)
+                        } catch (e: Exception) {
+                            false
+                        }
+                        Log.d(TAG, "${info.serviceName} ${if (alive) "still answers, kept" else "is gone"}")
+                        main.post {
+                            if (!alive && found[info.serviceName] === d) {
+                                found.remove(info.serviceName)
+                                publish()
+                            }
+                        }
+                    }, "klshare-check").start()
                 }
             }
         }
@@ -147,6 +174,7 @@ class Discovery(context: Context, private val ownId: String, private val onChang
         resolving = true
         nsd.resolveService(next, object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
+                Log.d(TAG, "resolve failed for ${info.serviceName}: $errorCode")
                 main.post { resolving = false; resolveNext() }
             }
 
@@ -177,6 +205,7 @@ class Discovery(context: Context, private val ownId: String, private val onChang
 
     companion object {
         const val SERVICE_TYPE = "_klshare._tcp"
+        private const val TAG = "klshare"
 
         /** Mobile data, VPN and dummy interfaces: other devices on the LAN can't reach these addresses. */
         private val NOT_LAN = listOf("rmnet", "ccmni", "v4-rmnet", "pdp", "tun", "dummy", "ppp")
