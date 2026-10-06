@@ -65,11 +65,16 @@ import dev.khanlabs.lanshare.transfer.Items
 import dev.khanlabs.lanshare.transfer.UiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
-/** Files or text another app shared with this one, waiting for the person to pick a device. */
-data class Shared(val uris: List<Uri> = emptyList(), val text: String = "") {
+/**
+ * Files or text another app shared with this one, waiting for the person to pick a device. [deviceId] is set when
+ * the person already picked one, in the Share menu or the app icon's menu.
+ */
+data class Shared(val uris: List<Uri> = emptyList(), val text: String = "", val deviceId: String = "") {
     val isEmpty: Boolean get() = uris.isEmpty() && text.isEmpty()
 }
 
@@ -155,13 +160,32 @@ fun HomeScreen(shared: Shared, link: String, onLinkHandled: () -> Unit, onShareD
 
     // something shared from another app: go to the device list at once
     LaunchedEffect(shared) {
-        if (!shared.isEmpty) {
-            tab = Tab.Send
-            aboutOpen = false
-            pending = Pending(
-                if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
-                uris = shared.uris, text = shared.text, fromShare = true,
-            )
+        if (shared.isEmpty && shared.deviceId.isEmpty()) return@LaunchedEffect
+        tab = Tab.Send
+        aboutOpen = false
+        val content = Pending(
+            if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
+            uris = shared.uris, text = shared.text, fromShare = true,
+        )
+        if (shared.deviceId.isEmpty()) {
+            pending = content
+            return@LaunchedEffect
+        }
+        // the device was already picked: wait a moment for discovery if the phone just started, then go
+        fun find() = Engine.state.value.let { st -> (st.nearby + st.added).firstOrNull { it.id == shared.deviceId } }
+        var device = find()
+        if (device == null) {
+            connecting = true
+            device = withTimeoutOrNull(4_000) { Engine.state.first { find() != null } }?.let { find() }
+            connecting = false
+        }
+        when {
+            device == null -> {
+                toast(context, "That device is not reachable right now. Pick another.")
+                if (shared.isEmpty) onShareDone() else pending = content
+            }
+            shared.isEmpty -> { chooseFor = device; onShareDone() }   // from the app icon's menu: what to send it?
+            else -> { sendPending(context, scope, device, content); onShareDone() }   // progress shows under Now on the Send tab
         }
     }
     /** Add the device a code names, with its full ID pinned. */

@@ -109,6 +109,11 @@ class MainActivity : ComponentActivity() {
             intent.data?.let { link = it.toString() }
             return
         }
+        // a device tapped in the app icon's menu: ask what to send it
+        if (intent.action == ShareShortcuts.ACTION_SEND_TO) {
+            shared = Shared(deviceId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID).orEmpty())
+            return
+        }
         val uris = when (intent.action) {
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
             Intent.ACTION_SEND_MULTIPLE ->
@@ -116,7 +121,8 @@ class MainActivity : ComponentActivity() {
             else -> return
         }
         val text = if (uris.isEmpty()) intent.getStringExtra(Intent.EXTRA_TEXT) ?: "" else ""
-        shared = Shared(uris, text)
+        // sent from a device in the Share menu: the system adds the shortcut's id
+        shared = Shared(uris, text, deviceId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID).orEmpty())
     }
 
     private companion object {

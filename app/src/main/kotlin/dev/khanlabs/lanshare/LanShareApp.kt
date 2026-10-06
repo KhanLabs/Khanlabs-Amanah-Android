@@ -9,5 +9,6 @@ class LanShareApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         Engine.init(this, BuildConfig.VERSION_NAME, BuildConfig.DEBUG)
+        ShareShortcuts.keepUpToDate(this)
     }
 }
