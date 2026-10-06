@@ -65,12 +65,15 @@ internal fun Sheet(
         skipPartiallyExpanded = true,
         confirmValueChange = { !locked || it != SheetValue.Hidden },
     )
+    val scroll = rememberScrollState()
     ModalBottomSheet(onDismissRequest = { if (!locked) onDismiss() }, sheetState = state) {
         Column(
-            Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+            Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scroll).padding(horizontal = 20.dp)
                 .padding(bottom = 12.dp),
             content = content,
         )
+        // when the content is taller than the room (large text, small screens) it scrolls under this line, so a cut-off row reads as scrolling
+        if (scroll.maxValue > 0) HorizontalDivider(Modifier.padding(bottom = 8.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp), content = footer)
         MadeWithBar()
     }
