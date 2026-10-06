@@ -430,10 +430,13 @@ Saved to Download/KhanLabs             [Change]
 | Name this phone                            |
 | [ OnePlus 8T                          ]    |
 | Other devices on this Wi-Fi see this name. |
-|                       [ Continue ]         |
+| Android will then ask to show              |
+| notifications.                             |
+|                      [ Get started ]       |
 |        Made with ♥ by Khan                 |
 +--------------------------------------------+
 ```
+Permissions are asked once, when Get started is tapped (notifications from Android 13; also finding devices on the Wi-Fi from Android 17). After that the app never asks again by itself. If notifications are off later, the Receiving sheet shows a card with a Turn on button that opens the system page. Built and tested on 2026-10-06.
 Permissions are asked when first needed, each with one line of reason:
 
 | Permission | When | Line shown first |
@@ -766,7 +769,7 @@ The sender's screen says: "If the browser warns, tap Continue or Keep. The files
 
 **Order (changed 2026-10-06):** UI and features first (R6 and R7, and the UI parts of R2), then reliability (R1 to R5), then R8 to R10. The phase numbers stay the same so that old notes still match. Nothing is released to the public until R5's gates pass, so features built first are private builds only. When a feature is built before its reliability phase, its tests are written in R1 and run in R5 before release. Patch releases of safety fixes for the existing Windows 1.2.x are allowed if they pass the v1 gates.
 
-**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide.
+**Done so far in the UI-first stretch (Android 0.1.0, commit `0047500`, tested on the OnePlus 8T):** three tabs (Send, Activity, Settings), the Receiving chip and sheet, content-first and device-first sending with Folder, the offer sheet with a countdown and "New device" wording, Open, Show, Share and Copy after a transfer, the Activity list kept on the phone, "Not showing up?" help, device details, and the "Made with ♥ by Khan" bar on every screen. Checked at 200% text and at 320 dp wide. Added later the same day: the first-run screen, QR connect in both directions (`klshare://connect`, local addresses only, full ID pinned), links from a camera app, a Quick Settings tile, devices in the Share menu and the app icon menu, and photo previews in Activity. Still to build in this stretch: the Windows UI changes and Share to anyone.
 
 | Phase | What | Apps | Working days | Release |
 |---|---|---|---|---|

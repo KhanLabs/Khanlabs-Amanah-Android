@@ -11,7 +11,8 @@ The plan is `docs/PLAN.md` (rewritten 2026-10-06). The work order was changed on
 - **Tested on the phone:** the Windows conformance suite passes against the phone over Wi-Fi (38 of 38, slow tests included).
 - **Done 2026-10-06:** 1 GB with the screen off in deep Doze, and 2,000 files with hard names (see the Log).
 - **Done 2026-10-06 (later):** phone UI overhaul (commit `0047500`): Send, Activity and Settings tabs, Receiving chip and sheet, folder send, offer countdown, activity history. Tested on the OnePlus 8T, including 200% text and 320 dp wide.
-- **Next:** first-run screen, QR connect, Sharing Shortcuts and Quick Settings tile, thumbnails; then the Windows UI changes; then Share to anyone (R7). After that, the reliability phases R1 to R5.
+- **Done 2026-10-06 (UI first, part 2):** first-run screen with a one-time permission request, a warning when notifications are off, QR connect (phone shows and scans codes, the PC shows a code), `klshare://` links from a camera app, a Quick Settings tile, devices in other apps' Share menu and the app icon menu, photo previews in Activity, and a fix for the offer sheet at 320 dp and 200%.
+- **Next:** a real-camera QR scan (needs the owner to aim the phone at the PC screen); then the Windows UI changes; then Share to anyone (R7). After that, the reliability phases R1 to R5.
 
 ## Phase 2: phone app
 
@@ -153,6 +154,15 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-06 (first run, QR connect, shortcuts)
+- First run: a welcome screen with the name field and a Get started button (commit `0047500` and later). Permissions are asked once, when Get started is tapped, not on every launch. If notifications are off later, the Receiving sheet shows a card with a Turn on button that opens the system page.
+- QR connect: text format `klshare://connect?v=1&id=<64 hex>&name=&ip=&port=` (`ConnectCode.kt`, same bytes as `connect_code.py` in the Windows repo, one golden string tested on both sides). Only local network addresses are accepted, so a code can never make the app contact the internet. Scanning pins the full 256-bit ID through the TLS certificate. Tested over adb against the real PC: right ID connects, wrong ID is refused, a public address is refused, a silent address times out with a clear message.
+- The phone shows its own QR code (Receiving sheet) and scans one (Send tab, device picker, help sheet). The camera is only used to read the code. Links opened from the phone's camera app ask "Add this device?" first.
+- Quick Settings tile "Receive files" turns receiving on and off and starts or stops the service. Tested with `cmd statusbar click-tile`.
+- Sharing Shortcuts: up to 4 devices from the Nearby and added lists show in other apps' Share menu (tested from Firefox's Share) and in the app icon's menu (asks what to send). Direct send from the Share menu goes straight to the device and shows progress on the Send tab. The list stays on the phone.
+- Activity: expanded cards show up to 4 small previews of received photos (and videos on Android 10 and up). Tap one to open it.
+- Not tested yet: a real camera scan, Android 17 `ACCESS_LOCAL_NETWORK`, the Text dialog, the single-file Open button, the Light theme.
+
 ### 2026-10-06 (UI overhaul)
 - New phone UI, commit `0047500`. Tabs: Send, Activity, Settings. The Receiving chip in the top bar opens a sheet with the switch, the device name, the address, the ID and the save folder with a Show button.
 - Send: Files, Photos and videos, Folder and Text. Pick content first and then a device, or a device first and then content. Folder walks the tree (up to 10,000 files) and keeps sub-folders and empty files. Tested: 12 files, 150.9 MB, at about 11.4 MB/s.
@@ -160,7 +170,7 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - After a transfer: Open (one file), Show (the exact folder), Share (chooser), Copy (text). All tested.
 - Activity tab: filter chips, tap a card for names and actions, delete one or clear all. Stored on the phone only, in `noBackupFilesDir/history.json`, up to 200 entries.
 - Checked at 200% text and at 320 dp wide. Fixed there: the wrapped "Decline" button, the clipped nav labels, and the title that wrapped.
-- Still open: in the offer sheet at 320 dp and 200%, the "New device" row is partly covered by the "Answer within" text. Light theme, the Text dialog, the share-from-another-app flow and the single-file Open button are not tested on the phone yet.
+- Fixed later the same day: in the offer sheet at 320 dp and 200%, the "New device" row looked covered by the "Answer within" text. It was a scrolling area with no visible edge; sheets now draw a line where the scrolling area ends. Still not tested on the phone: Light theme, the Text dialog, the share-from-another-app flow and the single-file Open button are not tested on the phone yet.
 - A launch of the Windows app with `pythonw.exe` left two Block rules in Windows Firewall (Private profile). Only `python.exe` has an allow rule. The rules were not changed.
 
 ### 2026-10-06 (later)
