@@ -183,7 +183,8 @@ internal class OwnWifi(context: Context, private val main: Handler, private val 
     @SuppressLint("MissingPermission")
     private fun startGroup(band: OwnBand) {
         val mgr = app.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-        val channel = mgr?.initialize(app, main.looper) { failGroup("Wi-Fi Direct stopped working.") }
+        // Android also calls this when this app closes the channel itself, which is not a failure: p2pChannel is cleared first then
+        val channel = mgr?.initialize(app, main.looper) { if (p2pChannel != null) failGroup("Wi-Fi Direct stopped working.") }
         if (mgr == null || channel == null) return fail("This phone has no Wi-Fi Direct, so it can't pick a band. Use Automatic.")
         p2p = mgr
         p2pChannel = channel
