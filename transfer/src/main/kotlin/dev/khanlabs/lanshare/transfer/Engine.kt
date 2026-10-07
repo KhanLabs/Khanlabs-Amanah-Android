@@ -32,6 +32,7 @@ import dev.khanlabs.lanshare.net.Scan
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.SendJob
 import dev.khanlabs.lanshare.net.ShareDownload
+import dev.khanlabs.lanshare.net.ShareFile
 import dev.khanlabs.lanshare.net.ShareServer
 import dev.khanlabs.lanshare.net.fetchInfo
 import dev.khanlabs.lanshare.protocol.ConnectCode
@@ -109,7 +110,25 @@ data class ShareView(
     val endsAt: Long?,
     /** The page offers Amanah for Android. */
     val installer: Boolean,
+    /** All files, and how many are ready to download, still being checked, or could not be read. */
+    val files: Int = 0,
+    val ready: Int = 0,
+    val preparing: Int = 0,
+    val failed: Int = 0,
+    /** Files where a download was cut because the file changed after it was checked. */
+    val problems: Int = 0,
+    /** The files that could not be read, with the reason; at most 20. */
+    val failedFiles: List<ShareFileIssue> = emptyList(),
+    /** The Wi-Fi this phone is connected to, when it says; null when it is not on Wi-Fi. */
+    val link: WifiLink? = null,
 )
+
+class ShareFileIssue(val name: String, val reason: String)
+
+/** How fast the phone's Wi-Fi connection is: [mhz] is the radio frequency (2412 to 2484 is 2.4 GHz), [mbps] the link speed. */
+data class WifiLink(val mhz: Int, val mbps: Int) {
+    val slowBand: Boolean get() = mhz in 1..2999
+}
 
 data class UiState(
     val name: String = "",
@@ -191,6 +210,9 @@ object Engine : ReceiverEvents {
     /** Longest message the screens accept: 16,000 characters is at most 64,000 bytes, under the protocol's 64 KB. */
     const val MAX_MESSAGE_CHARS = 16_000
 
+    /** Where a share keeps private copies of files of unknown size while it runs. Emptied at every start. */
+    private const val STASH_DIR = "share-stash"
+
     fun init(context: Context, versionName: String, debug: Boolean) {
         if (isInitialized) return
         app = context.applicationContext
@@ -198,6 +220,7 @@ object Engine : ReceiverEvents {
         debugBuild = debug
         // no_backup: a phone restored from a backup must not get this phone's device ID
         identity = Identity.loadOrCreate(File(app.noBackupFilesDir, "identity"), "Android")
+        File(app.noBackupFilesDir, STASH_DIR).deleteRecursively() // copies left by a share the system killed
         loadAdded()
         own = OwnWifi(app, main) { addresses = Discovery.lanAddresses(); refresh() }
         discovery = Discovery(app, identity.id, ::answers) { found -> nearby = found; refresh() }
@@ -777,7 +800,8 @@ object Engine : ReceiverEvents {
                     else -> {
                         val pin = if (usePin) "%06d".format(SecureRandom().nextInt(1_000_000)) else null
                         val link = if (receiving) myCode()?.toText().orEmpty() else ""
-                        val s = ShareServer(items, pin, minutes, shareDownloads(), link, appLabel, onChange = ::refresh)
+                        val s = ShareServer(items, pin, minutes, shareDownloads(), link, appLabel, onChange = ::refresh,
+                            stash = File(app.noBackupFilesDir, STASH_DIR))
                         try {
                             s.start()
                         } catch (e: Exception) {
@@ -800,6 +824,40 @@ object Engine : ReceiverEvents {
         }
     }
 
+    /**
+     * Adds [items] to the live share. Everything shared so far stays as it is; the page shows the new files at the
+     * top as just added. Calls back on the main thread with null, or a message the screen shows.
+     */
+    fun addToShare(items: List<SendItem>, onResult: (String?) -> Unit) {
+        io.execute {
+            val s = synchronized(lock) { share }
+            val error = try {
+                when {
+                    items.isEmpty() -> "Pick something to add first."
+                    s == null || !s.live() -> "This share has ended. Start a new one."
+                    else -> {
+                        s.addFiles(items)
+                        null
+                    }
+                }
+            } catch (e: IllegalStateException) {
+                "This share has ended. Start a new one."
+            } catch (e: IllegalArgumentException) {
+                e.message ?: "Couldn't add those files."
+            } catch (e: Exception) {
+                "Couldn't add those files: ${e.message}"
+            }
+            refresh()
+            main.post { onResult(error) }
+        }
+    }
+
+    /** Takes the files that could not be read out of the share, so they can be picked again. */
+    fun removeUnreadableFromShare() {
+        val s = synchronized(lock) { share } ?: return
+        io.execute { s.removeFailed() }
+    }
+
     /** Ends the share and clears it from the screen. Downloads in progress are cut; the address then says it has ended. */
     fun stopShare() {
         val s = synchronized(lock) { share.also { share = null; shareEndsAt = null } } ?: return
@@ -820,7 +878,20 @@ object Engine : ReceiverEvents {
             url = shareHost()?.let { s.url(it) }.orEmpty(), pin = s.pin, items = s.itemCount, bytes = s.totalBytes,
             live = st.live, visitors = st.visitors, downloads = st.downloads, sent = st.bytes, endsAt = shareEndsAt,
             installer = s.hasInstaller,
+            files = st.files, ready = st.ready, preparing = st.preparing, failed = st.failed, problems = st.problems,
+            failedFiles = if (st.failed == 0) emptyList()
+            else s.sharedFiles.filter { it.state == ShareFile.State.FAILED }.take(20).map { ShareFileIssue(it.name, it.error) },
+            link = wifiLink(),
         )
+    }
+
+    /** The phone's own Wi-Fi connection. Needs no location permission, because the name of the network is not read. */
+    @Suppress("DEPRECATION")
+    private fun wifiLink(): WifiLink? = try {
+        val info = (app.getSystemService(Context.WIFI_SERVICE) as WifiManager).connectionInfo
+        if (info == null || info.frequency <= 0) null else WifiLink(info.frequency, info.linkSpeed.coerceAtLeast(0))
+    } catch (e: Exception) {
+        null
     }
 
     // --- state

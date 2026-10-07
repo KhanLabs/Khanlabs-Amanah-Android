@@ -223,6 +223,23 @@ class ShareServer(
         return n
     }
 
+    /**
+     * Takes the files that could not be read out of the list (the page told people about them), so the sharer can
+     * pick them again. Returns how many were removed.
+     */
+    fun removeFailed(): Int {
+        val bad = synchronized(addLock) {
+            val (bad, ok) = list.get().partition { it.state == ShareFile.State.FAILED }
+            if (bad.isNotEmpty()) {
+                list.set(ok)
+                book.release(bad.map { it.name })
+            }
+            bad
+        }
+        if (bad.isNotEmpty()) onChange()
+        return bad.size
+    }
+
     private fun add(items: List<SendItem>): Int {
         val added = synchronized(addLock) {
             val current = list.get()

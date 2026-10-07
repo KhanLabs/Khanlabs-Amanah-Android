@@ -3,6 +3,7 @@ package dev.khanlabs.lanshare.transfer
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.protocol.Names
@@ -39,9 +40,31 @@ object Items {
             var n = 1
             val base = safe
             while (!used.add(safe.lowercase())) safe = Names.numbered(base, n++) // two picks with one name
-            items += SendItem(safe, size) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
+            items += SendItem(safe, size, modified(context, uri)) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
         }
         return items to skipped
+    }
+
+    /**
+     * When the file was last changed, in milliseconds since 1970, or 0 when the provider doesn't say. A ZIP made
+     * from the file keeps it, so a photo keeps its date after it is unzipped.
+     */
+    private fun modified(context: Context, uri: Uri): Long = try {
+        val column = if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.Document.COLUMN_LAST_MODIFIED else null
+        var ms = 0L
+        if (column != null) {
+            context.contentResolver.query(uri, arrayOf(column), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) ms = c.getLong(0)
+            }
+        }
+        if (ms <= 0 && uri.authority == "media") { // the photo picker and gallery: seconds, not milliseconds
+            context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATE_MODIFIED), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) ms = c.getLong(0) * 1000
+            }
+        }
+        ms.coerceAtLeast(0L)
+    } catch (e: Exception) {
+        0L
     }
 
     /** A folder the person picked: every file in it, with names like "Trip/day 1/a.jpg". */
@@ -74,6 +97,7 @@ object Items {
             val cols = arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                 DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
             )
             try {
                 resolver.query(children, cols, null, null, null)?.use { c ->
@@ -94,7 +118,8 @@ object Items {
                         }
                         if (items.size >= V1.MAX_FILES) return Tree(base, emptyList(), skipped, tooMany = true)
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                        items += SendItem(path, size) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $path") }
+                        val changed = if (c.isNull(4)) 0L else c.getLong(4).coerceAtLeast(0L)
+                        items += SendItem(path, size, changed) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $path") }
                     }
                 }
             } catch (e: Exception) {

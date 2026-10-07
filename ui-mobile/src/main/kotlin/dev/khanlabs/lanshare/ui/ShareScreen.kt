@@ -27,11 +27,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -98,30 +100,23 @@ internal fun ShareScreen(s: UiState, onBack: () -> Unit, onOwnWifi: () -> Unit) 
 
 // --- step 1: pick what to share
 
-@OptIn(ExperimentalLayoutApi::class)
+/** The three ways to pick things to share. [reading] is true while a folder or a long list is being counted. */
+private class Pickers(val files: () -> Unit, val media: () -> Unit, val folder: () -> Unit, val reading: Boolean)
+
+/** Pickers for files, photos and videos, and a folder. [onPicked] gets the items and how many could not be read. */
 @Composable
-private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
+private fun rememberPickers(onPicked: (List<SendItem>, Int) -> Unit): Pickers {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var picked by remember { mutableStateOf<List<SendItem>>(emptyList()) }
-    var minutes by rememberSaveable { mutableIntStateOf(ShareServer.DEFAULT_MINUTES) }
-    var usePin by rememberSaveable { mutableStateOf(false) }
     var reading by remember { mutableStateOf(false) }
-    var starting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
-    fun add(items: List<SendItem>, skipped: Int) {
-        if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
-        picked = picked + items
-        error = null
-    }
     fun addUris(uris: List<Uri>) {
         if (uris.isEmpty()) return
         scope.launch {
             reading = true
             val (items, skipped) = withContext(Dispatchers.IO) { Items.fromUris(context, uris) }
             reading = false
-            add(items, skipped)
+            onPicked(items, skipped)
         }
     }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments(), ::addUris)
@@ -135,9 +130,46 @@ private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
             when {
                 t.tooMany -> toast(context, "That folder has more than 10,000 files. Share it in parts.")
                 t.items.isEmpty() -> toast(context, "That folder has no files to share.")
-                else -> add(t.items, t.skipped)
+                else -> onPicked(t.items, t.skipped)
             }
         }
+    }
+    return Pickers(
+        files = { pickFiles.launch(arrayOf("*/*")) },
+        media = { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+        folder = { pickFolder.launch(null) },
+        reading = reading,
+    )
+}
+
+@Composable
+private fun ReadingDialog() {
+    AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {},
+        title = { Text("Reading") },
+        text = { Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
+            Text("Counting the files.")
+        } },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
+    val context = LocalContext.current
+    var picked by remember { mutableStateOf<List<SendItem>>(emptyList()) }
+    var minutes by rememberSaveable { mutableIntStateOf(ShareServer.DEFAULT_MINUTES) }
+    var usePin by rememberSaveable { mutableStateOf(false) }
+    var starting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val pick = rememberPickers { items, skipped ->
+        if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
+        picked = picked + items
+        error = null
     }
 
     Text("Someone without Amanah scans a QR code with their camera and downloads only what you pick here. " +
@@ -146,11 +178,9 @@ private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
 
     SectionHeader("What to share")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { pickFiles.launch(arrayOf("*/*")) }) { Text("Files") }
-        OutlinedButton(onClick = { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }) {
-            Text("Photos and videos")
-        }
-        OutlinedButton(onClick = { pickFolder.launch(null) }) { Text("Folder") }
+        OutlinedButton(onClick = pick.files) { Text("Files") }
+        OutlinedButton(onClick = pick.media) { Text("Photos and videos") }
+        OutlinedButton(onClick = pick.folder) { Text("Folder") }
     }
     if (picked.isEmpty()) {
         Muted("Nothing picked yet.")
@@ -206,23 +236,21 @@ private fun Setup(s: UiState, onOwnWifi: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) { Text(if (starting) "Starting" else "Start sharing") }
 
-    if (reading) AlertDialog(
-        onDismissRequest = {},
-        confirmButton = {},
-        title = { Text("Reading") },
-        text = { Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(28.dp))
-            Spacer(Modifier.width(16.dp))
-            Text("Counting the files.")
-        } },
-    )
+    if (pick.reading) ReadingDialog()
 }
 
 // --- step 2: the QR code, while it is on
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Live(v: ShareView, own: OwnWifiView) {
     val context = LocalContext.current
+    val addMore = rememberPickers { items, skipped ->
+        if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
+        if (items.isNotEmpty()) Engine.addToShare(items) { e ->
+            toast(context, e ?: "Added ${itemsText(items.size, "file")}. They show at the top of the page.")
+        }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(v.live, v.endsAt) {
         while (v.live && v.endsAt != null) {
@@ -278,6 +306,15 @@ private fun Live(v: ShareView, own: OwnWifiView) {
             }
         }
     }
+    SectionHeader("Add more")
+    Muted("New files show at the top of the page for people who already opened it. Nothing already shared changes.")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = addMore.files) { Text("Files") }
+        OutlinedButton(onClick = addMore.media) { Text("Photos and videos") }
+        OutlinedButton(onClick = addMore.folder) { Text("Folder") }
+    }
+    FileStatus(v)
+    SpeedHint(v, own.hosting)
     Counts(v)
     Muted(v.endsAt?.let { "Ends in ${remainingText(it - now)}." } ?: "Stays on until you stop it.")
     if (v.installer) Muted("The page also offers Amanah for Android, so they can install it from this phone.")
@@ -288,6 +325,72 @@ private fun Live(v: ShareView, own: OwnWifiView) {
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error,
             contentColor = MaterialTheme.colorScheme.onError),
     ) { Text("Stop sharing") }
+    if (addMore.reading) ReadingDialog()
+}
+
+/** Which files are ready for people to download, which are still being read, and which could not be read at all. */
+@Composable
+private fun FileStatus(v: ShareView) {
+    if (v.preparing > 0 && v.files > 0) {
+        val done = v.files - v.preparing
+        Text("Getting files ready: $done of ${v.files}", style = MaterialTheme.typography.bodyMedium)
+        LinearProgressIndicator(progress = { done.toFloat() / v.files }, modifier = Modifier.fillMaxWidth())
+        Muted("Each file is read once and checked. People can download a file as soon as it is ready.")
+    }
+    if (v.failed > 0) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("${itemsText(v.failed, "file")} couldn't be read", style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer)
+                for (f in v.failedFiles.take(5)) {
+                    Text("${f.name}: ${f.reason}", style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                        overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(top = 2.dp))
+                }
+                if (v.failed > 5) Muted("and ${v.failed - 5} more")
+                Muted("The page tells people they are missing. Remove them from the list, then pick them again with Add more.")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { Engine.removeUnreadableFromShare() }) { Text("Remove them") }
+                }
+            }
+        }
+    }
+    if (v.problems > 0) {
+        Muted("${itemsText(v.problems, "file")} changed while it was being sent, so that download was stopped. People can try it again.")
+    }
+}
+
+/**
+ * For a big share, how long it takes and why. Most of the wait is the Wi-Fi band: 2.4 GHz moves about 7 MB/s here, 5 GHz
+ * three to five times that. Skipped for small shares, where the band makes no difference to anyone.
+ */
+@Composable
+private fun SpeedHint(v: ShareView, hosting: Boolean) {
+    val link = v.link ?: return
+    if (v.bytes < BIG_SHARE) return
+    // a link rate is not what a transfer gets: about 55 per cent of it reaches the file
+    val perSecond = link.mbps * 1_000_000L / 8 * 55 / 100
+    val eta = if (!hosting && perSecond > 0) etaText(v.bytes / perSecond) else null
+    val text = when {
+        hosting && link.slowBand ->
+            "This phone is also connected to a 2.4 GHz Wi-Fi, so the network it makes is 2.4 GHz too, the slow kind. " +
+                "A big share can take many minutes. Turn that Wi-Fi off and start the network again, and it may use 5 GHz."
+        link.slowBand ->
+            "This phone is on 2.4 GHz Wi-Fi, the slow kind.${eta?.let { " ${Format.size(v.bytes)} takes $it." } ?: ""} " +
+                "On 5 GHz it is 3 to 5 times faster. Put both phones on the 5 GHz name of your router, often ending in 5G."
+        hosting -> return
+        else -> "This phone is on 5 GHz Wi-Fi.${eta?.let { " ${Format.size(v.bytes)} takes $it." } ?: ""}"
+    }
+    Muted(text)
+}
+
+private const val BIG_SHARE = 500L * 1024 * 1024
+
+/** "about 40 s", "about 6 min", "about 1 h 10 min". */
+private fun etaText(seconds: Long): String = when {
+    seconds < 90 -> "about ${maxOf(seconds, 10)} s"
+    seconds < 5400 -> "about ${(seconds + 30) / 60} min"
+    else -> "about ${seconds / 3600} h ${(seconds % 3600) / 60} min"
 }
 
 @Composable

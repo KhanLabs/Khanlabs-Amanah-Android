@@ -181,7 +181,12 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
   - The "Open in Amanah" link on the page no longer carries the Wi-Fi name and password.
   - A stalled download is cut after 90 s with no byte (the browser can resume it). The 17th connection from one address gets 503 with `Retry-After` instead of silence.
   - Optional private copy of each file made during the first read (`stash`), used for files of unknown size; off for the rest.
-- Checked: the app builds, 100 tests pass in `core-net`. **Not done yet:** the phone screens (Add more, per-file state), the Windows app, a device test.
+- New on the phone screens (`ShareScreen`, `Engine`, `Items`):
+  - "Add more" on the live share screen: Files, Photos and videos, Folder. The new files go into the running share and show a toast.
+  - "Getting files ready: x of n" with a bar while files are read. A card lists files that could not be read, with a "Remove them" button.
+  - A speed note for shares over 500 MB. It reads the Wi-Fi band and link speed (no location permission needed). On 2.4 GHz it gives the time and says 5 GHz is 3 to 5 times faster; on the phone's own network it says the network is stuck on 2.4 GHz while the phone is also on a 2.4 GHz Wi-Fi. The time uses 55 per cent of the link rate, which matches the 319 s measured for 2.38 GB at a 103 Mbps link (the note says about 6 min).
+  - Each picked file now carries its modified time, so a ZIP keeps photo dates.
+- Checked: the app builds, 100 tests pass in `core-net`. **Not done yet:** a device test (the new APK is not installed on the phone), the Windows app.
 
 ### 2026-10-07 (Search this network, Android)
 - The "Not showing up?" sheet has a **Search this network** button (step 5), with a progress bar, a Stop button and a result line. `Engine.searchNetwork` runs `Scan.run` on a worker thread, keeps the devices it finds like ones added by address, and ends when the sheet closes. It runs only when tapped.

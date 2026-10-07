@@ -201,6 +201,13 @@ internal class NameBook {
         return out.map { it!! }
     }
 
+    /** Frees the names of files that were taken out of the share, so the same file can be added again under its own name. */
+    fun release(names: List<String>) {
+        for (name in names) {
+            if ('/' in name) paths.remove(name.lowercase()) else singles.remove(name.lowercase())
+        }
+    }
+
     private fun numbered(name: String, n: Int): String {
         val slash = name.lastIndexOf('/')
         val dot = name.lastIndexOf('.')
