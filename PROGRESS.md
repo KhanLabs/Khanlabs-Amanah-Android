@@ -134,7 +134,8 @@ Checked online 2026-10-07: target API, foreground service declaration, self-upda
 - [ ] Content rating questionnaire, target audience (not for children), ads declaration (no ads)
 - [ ] App access: reviewers need two devices, so write the steps or give a video
 - [ ] Store listing: name up to 30 characters, short description up to 80, icon 512x512, feature graphic 1024x500, at least 2 phone screenshots
-- [ ] Personal developer account made after 2023-11-13: closed test with 12 testers for 14 days before production. Organization accounts skip this. Account type not known yet.
+- [ ] The Play developer account is personal (owner, 2026-10-07): closed test with 12 testers for 14 days before production. Start recruiting testers early, because this is the longest step.
+- [ ] **LAST, once the app is all finished and polished (owner's order, 2026-10-07):** write the documents Play needs (privacy policy, Data safety answers, content rating answers, foreground service descriptions and videos, app access steps, store text) and take the screenshots for the store listing. Until then the work is features, reliability and speed, so the app beats every mainstream file sharing app.
 
 ## Test devices
 
@@ -190,8 +191,13 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Receiver (`Receiver.kt`): finds files already here (same name and size, and the date within 2 seconds when both sides know it), skips them when the person leaves the checkbox on, takes over a half-received file when the sender comes back, answers 409 with the state, and sends the SHA-256.
 - Phone store (`Stores.kt`, `ReceivedIndex.kt`): MediaStore can't keep a file date, so a small list in `noBackupFilesDir` (`received-index.tsv`) holds the sender's date and name for each saved file. Android 6 to 9 sets the file date itself. An app only sees its own MediaStore files, so files from an earlier install are never "already here".
 - Screens: the offer sheet has "Skip N files already here" (on by default; the wording never says "identical"); the send card shows "Nothing new" and the skipped count, a "Try now" button while waiting to try again, "Send the rest" or "Try again" after a failed or cancelled send, and "Verified: every file arrived whole" when the receiver sent a SHA-256. Accept in the notification uses the same default (skip on).
-- Tests: 115 pass in `core-protocol` and `core-net` (10 in `RetryAndSkipTest`, 5 new in `ReceivedIndexTest`). `:app:compileDebugKotlin` passes. Not installed on a phone yet.
-- Not done: the SHA-256 mismatch path has no test; the Windows app does not have skip, retry or Verified yet; nothing was tried on a real phone.
+- Tests: 115 pass in `core-protocol` and `core-net` (10 in `RetryAndSkipTest`, 5 new in `ReceivedIndexTest`). `:app:compileDebugKotlin` passes.
+- Tried on the OnePlus 8T (Android 14, debug build installed 13:38), PC to phone with `gradlew :core-net:sendTo`, accepting on the phone:
+  - First send of 3 files (8 MB): the offer sheet shows no skip box (nothing is here yet). Saved to `Download/KhanLabs/set1/`.
+  - Same 3 files again: the sheet says "Nothing new" and "Skip 3 files already here" with the box ticked. After Accept the card says "Nothing new · all already here" and "3 files were already here and left out". No second copies were made. The sender printed "Nothing new to send. All 3 files were already on OnePlus 8T".
+  - 300 MB file with the phone's Wi-Fi switched off for 8 seconds in the middle: the sender noticed the break 11 seconds after the Wi-Fi went off ("The connection to OnePlus 8T dropped. Trying again in 2 seconds."), started again 3 seconds later, and the whole file arrived (49 s for the second try). `sha256sum` on the phone matches the original. One file, no leftover partial.
+- Seen while testing: (1) a break takes about 11 seconds to be noticed; (2) a retry sends the whole file again, because v1 cannot resume. Both cost time on big files: a resume from the byte already there (protocol v2, plan row 9) is the big win. (3) The "Verified" line was not seen on a screen: the test sender is a command line. It needs a send from the phone.
+- Not done: the SHA-256 mismatch path has no test; the Windows app does not have skip, retry or Verified yet.
 - Google Play: a checklist is under "Phase 5: release".
 
 ### 2026-10-07 (Share to anyone: ZIP fix and "add more", Android server)

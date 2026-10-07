@@ -30,8 +30,12 @@ fun main(args: Array<String>) {
         }
     }
     val me = Me(Identity.create("cli").id, "Kotlin sender", "android", "Amanah Android test")
+    var shown = ""
     val job = SendJob(clients, me, device, items, text) { j ->
-        if (j.state != SendJob.State.SENDING) println("${j.state} ${j.message}")
+        // every change of state or message, so a break and the new try show up; progress alone prints nothing
+        val line = "${j.state} ${j.message}"
+        if (line != shown) println(line)
+        shown = line
     }
     job.run()
     println("Saved: ${job.saved}")
