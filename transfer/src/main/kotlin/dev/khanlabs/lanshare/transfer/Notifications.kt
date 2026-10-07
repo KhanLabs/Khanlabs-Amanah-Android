@@ -200,6 +200,29 @@ object Notifications {
         NotificationManagerCompat.from(context).cancel(PAUSED_TAG, 0)
     }
 
+    private const val AUTO_OFF_TAG = "auto-off"
+
+    /** Shown when receiving turned itself off (the Settings choice), so a person who was not looking at the screen knows. */
+    fun receivingOff(context: Context, text: String) {
+        if (!allowed(context)) return
+        val b = NotificationCompat.Builder(context, CHANNEL_DONE)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("Receiving is off")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+        try {
+            NotificationManagerCompat.from(context).notify(AUTO_OFF_TAG, 0, b.build())
+        } catch (e: SecurityException) {
+            // notifications were turned off in the meantime
+        }
+    }
+
+    fun cancelReceivingOff(context: Context) {
+        NotificationManagerCompat.from(context).cancel(AUTO_OFF_TAG, 0)
+    }
+
     fun received(context: Context, v: IncomingView) {
         if (!allowed(context)) return
         val title = when {

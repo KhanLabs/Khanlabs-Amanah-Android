@@ -74,7 +74,7 @@ internal fun ReceivingCard(
     val detail = when (state) {
         RxState.Receiving -> "Visible as ${s.name}"
         RxState.Starting -> "Getting ready"
-        RxState.Off -> "Others can't send to you. You can still send."
+        RxState.Off -> s.autoOffReason.ifEmpty { "Others can't send to you. You can still send." }
         RxState.NoWifi -> "Connect to Wi-Fi, or make a direct link"
         RxState.Problem -> s.listenError ?: ""
     }

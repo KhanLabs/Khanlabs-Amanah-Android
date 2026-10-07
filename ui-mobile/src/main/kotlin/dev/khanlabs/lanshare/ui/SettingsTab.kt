@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.khanlabs.lanshare.net.AutoOff
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.UiState
 
@@ -78,6 +79,16 @@ internal fun SettingsTab(
                     "Receiving",
                     if (s.receiving) "On. You always choose to accept or decline." else "Off. Others can't send to you.",
                 ) { Switch(checked = s.receiving, onCheckedChange = onReceivingChange) }
+                Rule()
+                Column(Modifier.padding(16.dp)) {
+                    Text("Turn receiving off by itself", style = MaterialTheme.typography.bodyLarge)
+                    Muted(AutoOff.describe(s.autoOff))
+                    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((key, label) in AutoOff.CHOICES) {
+                            FilterChip(selected = s.autoOff == key, onClick = { Engine.setAutoOff(key) }, label = { Text(label) })
+                        }
+                    }
+                }
                 Rule()
                 SettingRow("Save files to", s.folder, onClick = { showFolder(context) }) { TextButton(onClick = { showFolder(context) }) { Text("Show") } }
             }

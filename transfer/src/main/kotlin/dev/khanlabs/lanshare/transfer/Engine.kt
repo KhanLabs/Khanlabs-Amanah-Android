@@ -14,6 +14,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import dev.khanlabs.lanshare.link.Announcement
 import dev.khanlabs.lanshare.link.Discovery
+import dev.khanlabs.lanshare.net.AutoOff
 import dev.khanlabs.lanshare.net.ChatMessage
 import dev.khanlabs.lanshare.net.ChatStore
 import dev.khanlabs.lanshare.net.Clients
@@ -178,6 +179,10 @@ data class UiState(
     val reachable: Set<String> = emptySet(),
     /** The Settings switch: list saved devices that are not nearby, under their own heading, so they can be removed. */
     val showInactive: Boolean = true,
+    /** The Settings choice of turning receiving off by itself: never, hour or network (see [AutoOff]). */
+    val autoOff: String = AutoOff.NEVER,
+    /** Why receiving is off when it turned itself off, in words for the status card; empty once it is turned on again. */
+    val autoOffReason: String = "",
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
@@ -256,6 +261,8 @@ object Engine : ReceiverEvents {
         discovery = Discovery(app, identity.id, ::answers) { found -> nearby = found; refresh() }
         watchNetwork()
         addresses = Discovery.lanAddresses()
+        autoOffBaseline = addresses
+        scheduleAutoOff()
         refresh()
         checkSaved()
     }
@@ -308,11 +315,76 @@ object Engine : ReceiverEvents {
         refresh()
     }
 
-    fun setReceiving(on: Boolean) {
-        prefs.edit().putBoolean("receiving", on).apply()
+    fun setReceiving(on: Boolean) = applyReceiving(on, "")
+
+    /**
+     * Turns receiving on or off. [reason] is the words for the status card when receiving turned itself off ([AutoOff]);
+     * it is kept until receiving is turned on again. The hour of [AutoOff.HOUR] counts from the moment of turning it on.
+     */
+    private fun applyReceiving(on: Boolean, reason: String) {
+        prefs.edit().putBoolean("receiving", on).putLong("rx_on_at", if (on) System.currentTimeMillis() else 0L)
+            .putString("rx_off_reason", if (on) "" else reason).apply()
         // The service may keep running for a share; the receiver itself follows this switch.
         if (!on) stopReceiving()
+        if (on) Notifications.cancelReceivingOff(app) else if (reason.isNotEmpty()) Notifications.receivingOff(app, reason)
+        scheduleAutoOff()
         refresh()
+    }
+
+    // --- turning receiving off by itself
+
+    /** The Settings choice: [AutoOff.NEVER] (the default), [AutoOff.HOUR] or [AutoOff.NETWORK]. */
+    val autoOff: String get() = AutoOff.parse(prefs.getString("auto_off", null))
+
+    fun setAutoOff(mode: String) {
+        prefs.edit().putString("auto_off", AutoOff.parse(mode)).apply()
+        scheduleAutoOff()
+        refresh()
+    }
+
+    private val autoOffTask = Runnable { if (!turnOffIfHourUp()) scheduleAutoOff() }
+
+    /** When receiving was turned on, in milliseconds since 1970. A phone that has had receiving on since before this existed counts from now. */
+    private fun receivingSince(): Long {
+        val now = System.currentTimeMillis()
+        val since = prefs.getLong("rx_on_at", 0L)
+        if (since in 1..now) return since
+        prefs.edit().putLong("rx_on_at", now).apply() // never set, or the clock was set back: count from now
+        return now
+    }
+
+    /** Sets (or clears) the timer for [AutoOff.HOUR]. */
+    private fun scheduleAutoOff() {
+        main.removeCallbacks(autoOffTask)
+        if (receiving && autoOff == AutoOff.HOUR) {
+            main.postDelayed(autoOffTask, AutoOff.hourLeft(receivingSince(), System.currentTimeMillis()))
+        }
+    }
+
+    /**
+     * Turns receiving off when the choice is [AutoOff.HOUR] and the hour is up. The timer does not run while the phone
+     * sleeps, so this also runs on every state change; both only look at the clock. True when it turned receiving off.
+     */
+    private fun turnOffIfHourUp(): Boolean {
+        if (!receiving || autoOff != AutoOff.HOUR) return false
+        if (!AutoOff.hourUp(AutoOff.HOUR, receivingSince(), System.currentTimeMillis())) return false
+        applyReceiving(false, AutoOff.reason(AutoOff.HOUR))
+        return true
+    }
+
+    /** The local addresses the last time the Wi-Fi was looked at while this phone was not making or joining a network of its own. */
+    @Volatile private var autoOffBaseline: List<String> = emptyList()
+
+    /**
+     * [AutoOff.NETWORK]: the phone's addresses moved, so it is on another Wi-Fi or has lost it. While this phone makes or
+     * joins a network because the person asked for it, the addresses move for a reason the person chose, so nothing
+     * happens and the baseline stays where it was.
+     */
+    private fun turnOffIfNetworkMoved(now: List<String>) {
+        if (::own.isInitialized && own.view.active) return
+        val before = autoOffBaseline
+        autoOffBaseline = now
+        if (receiving && AutoOff.networkMoved(autoOff, before, now)) applyReceiving(false, AutoOff.reason(AutoOff.NETWORK))
     }
 
     /** True while a share to anyone is handing files out. */
@@ -1068,6 +1140,7 @@ object Engine : ReceiverEvents {
 
     private fun networkChanged() {
         addresses = Discovery.lanAddresses()
+        turnOffIfNetworkMoved(addresses)
         refresh()
         checkSaved(minGapMs = 10_000)
     }
@@ -1075,6 +1148,7 @@ object Engine : ReceiverEvents {
     /** Rebuilds the screen state from the live objects. Called from any thread. */
     fun refresh() {
         if (!isInitialized) return
+        if (turnOffIfHourUp()) return // it calls refresh() again
         val snapshot = synchronized(lock) {
             UiState(
                 name = name,
@@ -1100,6 +1174,8 @@ object Engine : ReceiverEvents {
                 share = shareView(),
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 allowVpn = allowVpn,
+                autoOff = autoOff,
+                autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
                 startTab = startTab,
                 theme = theme,
                 accent = accent,

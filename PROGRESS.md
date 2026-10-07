@@ -185,6 +185,12 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-08 (receiving can turn itself off; Messages tab label)
+- Settings, Receiving, **Turn receiving off by itself**: Never (the default), After 1 hour, or When the Wi-Fi changes. Same words and rules as the Windows app. The hour counts from the moment receiving was turned on (saved, so it also counts across an app restart; a clock set back starts it again). The Wi-Fi choice turns receiving off when the phone's local addresses change (another network, or the Wi-Fi lost); joining the first network after having none does not count, and nothing happens while this phone makes or joins a network because the person asked for it. When it turns itself off the status card says why ("Receiving turned off after an hour..."), a notification says so too, and both go away when receiving is turned on again.
+- Code: `AutoOff` in `core-net` (the rules, no Android), `Engine` (`setAutoOff`, `applyReceiving`, the hour timer, a check on every state change because the timer stops while the phone sleeps, the network check in `networkChanged`), `Notifications.receivingOff`, `UiState.autoOff` and `autoOffReason`. 9 new tests in `AutoOffTest` (125 in `core-net`).
+- The "Messages" tab label no longer clips at 320 dp or with large text: the smallest label style, no letter spacing, and it may be a little wider than its slot.
+- Checked: the app builds and the JVM tests pass. **Not tried on a phone**: the chips, the notification, the hour (change the clock or wait), and the label at 320 dp with 200% text (use the debug Screen and Text size switches).
+
 ### 2026-10-07 (design pass from the research: status card, Stats, Settings groups, Appearance, Android)
 - Research: Opus (a second model) searched other sharing apps and 2025-26 design guidance, then answered six objections. I checked three of its sources by hand (Android settings guidelines, Nielsen Norman Group on charts, 9to5google on Quick Share): they match. The owner's rules for now: one accent color, three surface levels, one corner family, one typeface, short spring motion, no glass blur, no pure black by default. If it does not look good, change it.
 - History keeps more per transfer (`HistoryEntry`, all optional, old entries stay valid): peer ID, kind, route, requested, accepted and ended times, files and bytes left out as already there, resumes, peak speed, verified count. `SendJob` gained `acceptedAt`, `resumes`, `peakSpeed`; `Offer` gained `acceptedAt`.
