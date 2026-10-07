@@ -564,7 +564,15 @@ object Engine : ReceiverEvents {
                 peerId = if (DeviceId.isValid(offer.sender.id)) offer.sender.id else "",
                 kind = if (v.saved.any { '/' in it }) "folder" else "files",
                 requestedAt = offer.created, acceptedAt = offer.acceptedAt, endedAt = now,
-                filesSkipped = offer.files.count { it.skipped }, bytesSkipped = offer.files.filter { it.skipped }.sumOf { it.size }))
+                filesSkipped = offer.files.count { it.skipped }, bytesSkipped = offer.files.filter { it.skipped }.sumOf { it.size },
+                items = offer.files.map { f ->
+                    HistoryFile(f.savedName ?: f.name, f.size, when {
+                        f.skipped -> "skipped"
+                        f.state == "done" -> "done"
+                        f.state == "failed" -> "failed"
+                        else -> "cancelled" // still waiting or half received when the receive was stopped
+                    })
+                }))
         }
         refresh()
     }
@@ -731,7 +739,16 @@ object Engine : ReceiverEvents {
             route = if (nearby.any { it.id == job.device.id }) "nearby" else "saved",
             requestedAt = begun, acceptedAt = job.acceptedAt, endedAt = now,
             filesSkipped = job.skipped, bytesSkipped = job.skippedBytes,
-            resumes = job.resumes, peakBps = job.peakSpeed.toLong(), verified = job.verified))
+            resumes = job.resumes, peakBps = job.peakSpeed.toLong(), verified = job.verified,
+            items = sentFiles(job, state)))
+    }
+
+    /** Each file of a send with its size and what became of it; a file that did not get there is marked with how the send ended. */
+    private fun sentFiles(job: SendJob, endState: String): List<HistoryFile> {
+        val results = job.results()
+        return job.items.mapIndexed { i, item ->
+            HistoryFile(item.name, item.size, if (results[i] == SendJob.UNSENT) endState else results[i])
+        }
     }
 
     private fun logFailure(what: String, job: SendJob) {

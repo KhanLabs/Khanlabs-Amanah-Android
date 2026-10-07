@@ -18,6 +18,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.transfer.Engine
+import dev.khanlabs.lanshare.transfer.Format
+import dev.khanlabs.lanshare.transfer.History
 import dev.khanlabs.lanshare.transfer.HistoryEntry
 
 private enum class Filter(val label: String) { All("All"), In("Received"), Out("Sent") }
@@ -83,8 +86,12 @@ private fun HistoryCard(e: HistoryEntry) {
             if (e.note.isNotEmpty()) Muted(e.note, modifier = Modifier.padding(top = 4.dp))
             if (open) {
                 Spacer(Modifier.height(8.dp))
-                for (n in e.names.take(8)) Text(n, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (e.files > 8) Muted("and ${e.files - 8} more")
+                if (e.items.isNotEmpty()) {
+                    FileList(e)
+                } else { // an entry from before the files were kept one by one: the names are all there is
+                    for (n in e.names.take(8)) Text(n, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (e.files > 8) Muted("and ${e.files - 8} more")
+                }
                 if (e.incoming && e.names.size == e.files) Thumbnails(e.names)
                 if (e.text.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
@@ -97,6 +104,34 @@ private fun HistoryCard(e: HistoryEntry) {
             }
         }
     }
+}
+
+/** Every file of one entry with its size and what became of it. Eight show first; the rest open with one tap. */
+@Composable
+private fun FileList(e: HistoryEntry) {
+    var all by remember { mutableStateOf(false) }
+    val shown = if (all) e.items else e.items.take(FILES_SHOWN)
+    for (f in shown) {
+        Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(f.name, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.width(8.dp))
+            Muted(listOf(Format.size(f.size), fileStateWord(f.state, e.incoming)).filter { it.isNotEmpty() }.joinToString("  ·  "))
+        }
+    }
+    if (e.items.size > shown.size) TextButton(onClick = { all = true }) { Text("Show all ${e.items.size}") }
+    val total = e.files + e.filesSkipped
+    // the phone keeps the first hundred files of a very large send
+    if (all && e.items.size >= History.MAX_ITEMS && total > e.items.size) Muted("and ${total - e.items.size} more")
+}
+
+private const val FILES_SHOWN = 8
+
+/** The word after a file's size; nothing for a file that went across. */
+private fun fileStateWord(state: String, incoming: Boolean) = when (state) {
+    "done" -> ""
+    "skipped" -> "already there"
+    "failed" -> "failed"
+    else -> if (incoming) "not received" else "not sent"
 }
 
 private fun stateWord(e: HistoryEntry) = when (e.state) {

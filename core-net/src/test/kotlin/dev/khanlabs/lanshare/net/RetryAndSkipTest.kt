@@ -104,6 +104,14 @@ class RetryAndSkipTest {
         assertEquals("Sent 1 new file. 1 was already on Loopback", job.message)
         assertTrue(job.unfinished().isEmpty())
         assertEquals(setOf("a.txt", "b.txt"), File(inbox, "docs").list()!!.toSet(), "no (1) copies")
+        // what the Activity list shows for each file, in the order the files were given
+        assertEquals(listOf(SendJob.ALREADY, SendJob.SENT), job.results())
+    }
+
+    @Test
+    fun aSendThatNeverStartedHasNothingSent() {
+        val job = SendJob(clients, me(), device(), listOf(item("a.txt", "x".toByteArray()), item("b.txt", "y".toByteArray())))
+        assertEquals(listOf(SendJob.UNSENT, SendJob.UNSENT), job.results())
     }
 
     @Test

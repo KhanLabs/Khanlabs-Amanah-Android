@@ -13,6 +13,12 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import java.io.File
 
+/**
+ * One file of a send or receive, as the open entry in Activity lists it. [state] is done (it went across), skipped (the
+ * other side already had it), failed, cancelled or declined (it did not go across).
+ */
+data class HistoryFile(val name: String, val size: Long, val state: String)
+
 /** One finished send or receive, for the Activity tab. Kept on this phone only. */
 data class HistoryEntry(
     val id: String,
@@ -50,6 +56,8 @@ data class HistoryEntry(
     val peakBps: Long = 0,
     /** How many files the receiver confirmed with the same SHA-256 (sends only). */
     val verified: Int = 0,
+    /** Every file with its size and what became of it, at most [History.MAX_ITEMS]; empty for entries made before this was kept. */
+    val items: List<HistoryFile> = emptyList(),
 )
 
 /**
@@ -61,7 +69,8 @@ class History(private val file: File) {
         private set
 
     @Synchronized
-    fun add(e: HistoryEntry) {
+    fun add(entry: HistoryEntry) {
+        val e = entry.copy(items = entry.items.take(MAX_ITEMS))
         all = (listOf(e) + all.filter { it.id != e.id }).take(MAX)
         save()
     }
@@ -103,6 +112,10 @@ class History(private val file: File) {
                 resumes = o["resumes"]?.jsonPrimitive?.int ?: 0,
                 peakBps = o["peak"]?.jsonPrimitive?.long ?: 0,
                 verified = o["verified"]?.jsonPrimitive?.int ?: 0,
+                items = o["items"]?.jsonArray?.map { f ->
+                    val x = f.jsonObject
+                    HistoryFile(x["n"]!!.jsonPrimitive.content, x["s"]!!.jsonPrimitive.long, x["t"]!!.jsonPrimitive.content)
+                }.orEmpty(),
             )
         }
     } catch (e: Exception) {
@@ -120,6 +133,9 @@ class History(private val file: File) {
                 put("requested", e.requestedAt); put("accepted", e.acceptedAt); put("ended", e.endedAt)
                 put("skipped", e.filesSkipped); put("skipped_bytes", e.bytesSkipped)
                 put("resumes", e.resumes); put("peak", e.peakBps); put("verified", e.verified)
+                put("items", JsonArray(e.items.take(MAX_ITEMS).map { f ->
+                    buildJsonObject { put("n", f.name); put("s", f.size); put("t", f.state) }
+                }))
             }
         })
         try {
@@ -137,5 +153,8 @@ class History(private val file: File) {
     companion object {
         const val MAX = 200
         const val MAX_NAMES = 100
+
+        /** Files listed with their size and state in one entry. The history file is written whole on every change, so it stays small. */
+        const val MAX_ITEMS = 100
     }
 }

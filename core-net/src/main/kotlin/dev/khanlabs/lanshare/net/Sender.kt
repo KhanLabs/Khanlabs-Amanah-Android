@@ -155,6 +155,8 @@ class SendJob(
     private val rate = Rate()
     /** Positions in [items] that are done: sent, or left out as already there. */
     private val finished: MutableSet<Int> = Collections.synchronizedSet(HashSet())
+    /** Positions in [items] left out because the receiver already has them. */
+    private val alreadyThere: MutableSet<Int> = Collections.synchronizedSet(HashSet())
     private val retrySignal = Semaphore(0)
 
     val speed: Double get() = rate.speed()
@@ -182,6 +184,18 @@ class SendJob(
 
     /** The items that did not get there (not sent, not already on the other side), for a new offer. */
     fun unfinished(): List<SendItem> = items.filterIndexed { i, _ -> i !in finished }
+
+    /**
+     * What became of each item, in the order of [items]: [SENT] (it went across), [ALREADY] (the receiver already had it,
+     * so it was left out) or [UNSENT] (it did not get there, whatever the reason).
+     */
+    fun results(): List<String> = items.indices.map { i ->
+        when {
+            i in alreadyThere -> ALREADY
+            i in finished -> SENT
+            else -> UNSENT
+        }
+    }
 
     /** While waiting to try again: stop waiting and try now. */
     fun retryNow() {
@@ -273,6 +287,7 @@ class SendJob(
         files.forEachIndexed { i, f ->
             if (f.id in already) {
                 finished += i
+                alreadyThere += i
                 skipped++
                 skippedBytes += f.size
             }
@@ -478,11 +493,16 @@ class SendJob(
         }
     }
 
-    private companion object {
-        const val CHUNK = 256 * 1024
-        val RETRY_DELAYS_S = longArrayOf(2, 4, 8, 15, 30)
-        val WINDOW_NS = TimeUnit.MINUTES.toNanos(3)
-        const val PROGRESS_BYTES = 1024 * 1024L
+    companion object {
+        /** The words [results] uses. */
+        const val SENT = "done"
+        const val ALREADY = "skipped"
+        const val UNSENT = "unsent"
+
+        private const val CHUNK = 256 * 1024
+        private val RETRY_DELAYS_S = longArrayOf(2, 4, 8, 15, 30)
+        private val WINDOW_NS = TimeUnit.MINUTES.toNanos(3)
+        private const val PROGRESS_BYTES = 1024 * 1024L
     }
 }
 
