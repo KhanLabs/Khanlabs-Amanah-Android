@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -344,7 +345,12 @@ fun HomeScreen(
                                         Icon(t.icon, contentDescription = null)
                                     }
                                 },
-                                label = { Text(t.label, maxLines = 1) },
+                                // the smallest label style with no letter spacing, and free to be a little wider than its
+                                // slot, so "Messages" is not clipped on a 320 dp screen or with large text
+                                label = {
+                                    Text(t.label, maxLines = 1, softWrap = false, modifier = Modifier.wrapContentWidth(unbounded = true),
+                                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp))
+                                },
                             )
                         }
                     }
