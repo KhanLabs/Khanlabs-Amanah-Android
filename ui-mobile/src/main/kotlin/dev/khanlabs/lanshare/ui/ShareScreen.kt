@@ -314,7 +314,7 @@ private fun Live(v: ShareView, own: OwnWifiView) {
         OutlinedButton(onClick = addMore.folder) { Text("Folder") }
     }
     FileStatus(v)
-    SpeedHint(v, own.hosting)
+    SpeedHint(v, own)
     Counts(v)
     Muted(v.endsAt?.let { "Ends in ${remainingText(it - now)}." } ?: "Stays on until you stop it.")
     if (v.installer) Muted("The page also offers Amanah for Android, so they can install it from this phone.")
@@ -365,21 +365,33 @@ private fun FileStatus(v: ShareView) {
  * three to five times that. Skipped for small shares, where the band makes no difference to anyone.
  */
 @Composable
-private fun SpeedHint(v: ShareView, hosting: Boolean) {
-    val link = v.link ?: return
+private fun SpeedHint(v: ShareView, own: OwnWifiView) {
     if (v.bytes < BIG_SHARE) return
-    // a link rate is not what a transfer gets: about 55 per cent of it reaches the file
-    val perSecond = link.mbps * 1_000_000L / 8 * 55 / 100
-    val eta = if (!hosting && perSecond > 0) etaText(v.bytes / perSecond) else null
+    val hosting = own.hosting
+    val canPick = remember { Engine.bandSupport.offer }
+    val again = if (canPick) " Turn the network off, make it again, and pick 5 GHz." else ""
     val text = when {
-        hosting && link.slowBand ->
-            "This phone is also connected to a 2.4 GHz Wi-Fi, so the network it makes is 2.4 GHz too, the slow kind. " +
-                "A big share can take many minutes. Turn that Wi-Fi off and start the network again, and it may use 5 GHz."
-        link.slowBand ->
-            "This phone is on 2.4 GHz Wi-Fi, the slow kind.${eta?.let { " ${Format.size(v.bytes)} takes $it." } ?: ""} " +
-                "On 5 GHz it is 3 to 5 times faster. Put both phones on the 5 GHz name of your router, often ending in 5G."
-        hosting -> return
-        else -> "This phone is on 5 GHz Wi-Fi.${eta?.let { " ${Format.size(v.bytes)} takes $it." } ?: ""}"
+        // the network this phone made: Android says which band it really got
+        hosting && own.slowBand == true ->
+            "The network this phone made is on 2.4 GHz, the slow kind. A big share can take many minutes.$again"
+        hosting && own.slowBand == false -> "The network this phone made is on 5 GHz, the fast kind."
+        else -> {
+            val link = v.link ?: return
+            // a link rate is not what a transfer gets: about 55 per cent of it reaches the file
+            val perSecond = link.mbps * 1_000_000L / 8 * 55 / 100
+            val eta = if (!hosting && perSecond > 0) etaText(v.bytes / perSecond) else null
+            val takes = eta?.let { " ${Format.size(v.bytes)} takes $it." } ?: ""
+            when {
+                hosting && link.slowBand ->
+                    "This phone is also connected to a 2.4 GHz Wi-Fi, so the network it makes is probably 2.4 GHz too, the slow kind. " +
+                        "A big share can take many minutes.${if (canPick) again else " Turn that Wi-Fi off and start the network again, and it may use 5 GHz."}"
+                link.slowBand ->
+                    "This phone is on 2.4 GHz Wi-Fi, the slow kind.$takes " +
+                        "On 5 GHz it is 3 to 5 times faster. Put both phones on the 5 GHz name of your router, often ending in 5G."
+                hosting -> return
+                else -> "This phone is on 5 GHz Wi-Fi.$takes"
+            }
+        }
     }
     Muted(text)
 }

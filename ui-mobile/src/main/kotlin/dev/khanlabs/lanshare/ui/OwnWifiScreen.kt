@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.khanlabs.lanshare.protocol.WifiCode
 import dev.khanlabs.lanshare.transfer.Engine
+import dev.khanlabs.lanshare.transfer.OwnBand
 import dev.khanlabs.lanshare.transfer.OwnWifiView
 import dev.khanlabs.lanshare.transfer.UiState
 
@@ -100,10 +102,15 @@ private fun Busy(text: String) {
 
 // --- make a network
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Off(o: OwnWifiView) {
     val context = LocalContext.current
     var denied by remember { mutableStateOf(false) }
+    // the choice is shown only when this phone can both pick a band and use 5 GHz
+    val support = remember { Engine.bandSupport }
+    var pick by rememberSaveable { mutableIntStateOf(0) } // an OwnBand, by position
+    val band = if (support.offer) OwnBand.values()[pick] else OwnBand.Auto
     // Android 13 and newer: Nearby devices. Android 8 to 12: Location (the app never reads the location).
     val needed = remember {
         when {
@@ -113,11 +120,24 @@ private fun Off(o: OwnWifiView) {
         }
     }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted.values.all { it }) Engine.startOwnNetwork() else denied = true
+        if (granted.values.all { it }) Engine.startOwnNetwork(band) else denied = true
     }
 
     SectionHeader("Make a network on this phone")
     Muted("Your phone's own Wi-Fi may disconnect while the network is on. Mobile data keeps working for other apps.")
+    if (support.offer) {
+        Text("Wi-Fi band", style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = band == OwnBand.Auto, onClick = { pick = OwnBand.Auto.ordinal }, label = { Text("Automatic") })
+            FilterChip(selected = band == OwnBand.Ghz24, onClick = { pick = OwnBand.Ghz24.ordinal }, label = { Text("2.4 GHz") })
+            FilterChip(selected = band == OwnBand.Ghz5, onClick = { pick = OwnBand.Ghz5.ordinal }, label = { Text("5 GHz") })
+        }
+        Muted(when (band) {
+            OwnBand.Auto -> "Android picks the band. Works with every phone, but it may be the slow one."
+            OwnBand.Ghz24 -> "Slower, about 7 MB/s at best. Every phone and PC can join."
+            OwnBand.Ghz5 -> "3 to 5 times faster for big files. Some older phones can't see it. If the other device can't find the network, make it again on 2.4 GHz."
+        })
+    }
     if (Build.VERSION.SDK_INT < 26) {
         Text("This Android version is too old to make a network from an app. It needs Android 8 or newer. You can still join one.",
             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -134,7 +154,7 @@ private fun Off(o: OwnWifiView) {
         onClick = {
             denied = false
             val missing = needed.filter { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-            if (missing.isEmpty()) Engine.startOwnNetwork() else ask.launch(missing.toTypedArray())
+            if (missing.isEmpty()) Engine.startOwnNetwork(band) else ask.launch(missing.toTypedArray())
         },
         modifier = Modifier.fillMaxWidth(),
     ) { Text("Make a network") }
@@ -148,6 +168,7 @@ private fun Hosting(s: UiState, o: OwnWifiView, onReceivingChange: (Boolean) -> 
     val code = remember(s.ownWifi, s.port, s.name, s.addresses) { Engine.myCode() }
 
     SectionHeader("The network is on")
+    bandLine(o)?.let { Muted(it) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(selected = kind == 0, onClick = { kind = 0 }, label = { Text("Amanah code") })
         FilterChip(selected = kind == 1, onClick = { kind = 1 }, label = { Text("Wi-Fi code") })
@@ -195,6 +216,18 @@ private fun Hosting(s: UiState, o: OwnWifiView, onReceivingChange: (Boolean) -> 
         onClick = { Engine.stopOwnNetwork() }, modifier = Modifier.fillMaxWidth(),
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
     ) { Text("Turn off the network") }
+}
+
+/** Which band the network is on, from what Android reports; when it reports nothing, what was asked for. Null for Automatic with no report. */
+private fun bandLine(o: OwnWifiView): String? = when {
+    o.slowBand == true -> "On 2.4 GHz." + if (o.band == OwnBand.Ghz5) {
+        " You asked for 5 GHz, but Android used 2.4 GHz. This can happen when the phone is also on a 2.4 GHz Wi-Fi. " +
+            "Turn that Wi-Fi off and make the network again."
+    } else ""
+    o.slowBand == false -> "On 5 GHz, the fast kind. A device that can't find the network may not support 5 GHz."
+    o.band == OwnBand.Ghz5 -> "You asked for 5 GHz."
+    o.band == OwnBand.Ghz24 -> "You asked for 2.4 GHz."
+    else -> null
 }
 
 // --- join a network

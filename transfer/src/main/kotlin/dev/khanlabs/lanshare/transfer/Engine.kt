@@ -743,12 +743,15 @@ object Engine : ReceiverEvents {
     // --- own Wi-Fi network (no router)
 
     /** Makes a Wi-Fi network on this phone. The screen asks for the permission first. The result shows in [UiState.ownWifi]. */
-    fun startOwnNetwork() {
+    fun startOwnNetwork(band: OwnBand = OwnBand.Auto) {
         main.post {
-            own.startHosting()
+            own.startHosting(band)
             TransferService.start(app)
         }
     }
+
+    /** Whether this phone can make its network on a band the person picks, and whether it has 5 GHz at all. */
+    val bandSupport: BandSupport get() = if (::own.isInitialized) own.bandSupport else BandSupport(canPick = false, has5Ghz = false)
 
     fun stopOwnNetwork() {
         main.post { own.stopAll() }
