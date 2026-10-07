@@ -179,6 +179,8 @@ data class UiState(
     val reachable: Set<String> = emptySet(),
     /** The Settings switch: list saved devices that are not nearby, under their own heading, so they can be removed. */
     val showInactive: Boolean = true,
+    /** The Settings switch: a short buzz when a transfer ends. On by default; the phone's own touch feedback setting still applies. */
+    val haptics: Boolean = true,
     /** The Settings choice of turning receiving off by itself: never, hour or network (see [AutoOff]). */
     val autoOff: String = AutoOff.NEVER,
     /** Why receiving is off when it turned itself off, in words for the status card; empty once it is turned on again. */
@@ -296,6 +298,14 @@ object Engine : ReceiverEvents {
 
     fun setAccent(value: String) {
         prefs.edit().putString("accent", value).apply()
+        refresh()
+    }
+
+    /** Whether the screens buzz when a transfer ends. */
+    val haptics: Boolean get() = prefs.getBoolean("haptics", true)
+
+    fun setHaptics(on: Boolean) {
+        prefs.edit().putBoolean("haptics", on).apply()
         refresh()
     }
 
@@ -1191,6 +1201,7 @@ object Engine : ReceiverEvents {
                 share = shareView(),
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 allowVpn = allowVpn,
+                haptics = haptics,
                 autoOff = autoOff,
                 autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
                 startTab = startTab,

@@ -238,7 +238,7 @@ internal fun IncomingCard(v: IncomingView) {
     Card {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(Icons.ArrowDown, MaterialTheme.colorScheme.primary)
+                TransferGlyph(Icons.ArrowDown, if (v.state == "done") Outcome.Done else null)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("From ${v.senderName}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -311,7 +311,11 @@ internal fun OutgoingCard(v: OutgoingView) {
     Card {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(Icons.ArrowUp, MaterialTheme.colorScheme.primary)
+                TransferGlyph(Icons.ArrowUp, when (v.state) {
+                    SendJob.State.DONE -> Outcome.Done
+                    SendJob.State.FAILED -> Outcome.Failed
+                    else -> null
+                })
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("To ${v.deviceName}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

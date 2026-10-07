@@ -111,6 +111,11 @@ internal fun SettingsTab(
                     }
                 }
                 Rule()
+                SettingRow(
+                    "Vibrate when a transfer ends",
+                    if (s.haptics) "On. One short buzz when a send or receive finishes or fails." else "Off.",
+                ) { Switch(checked = s.haptics, onCheckedChange = { Engine.setHaptics(it) }) }
+                Rule()
                 Column(Modifier.padding(16.dp)) {
                     Text("Open on", style = MaterialTheme.typography.bodyLarge)
                     Muted("The tab you see first when you open Amanah")
