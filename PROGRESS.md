@@ -197,7 +197,9 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
   - Same 3 files again: the sheet says "Nothing new" and "Skip 3 files already here" with the box ticked. After Accept the card says "Nothing new · all already here" and "3 files were already here and left out". No second copies were made. The sender printed "Nothing new to send. All 3 files were already on OnePlus 8T".
   - 300 MB file with the phone's Wi-Fi switched off for 8 seconds in the middle: the sender noticed the break 11 seconds after the Wi-Fi went off ("The connection to OnePlus 8T dropped. Trying again in 2 seconds."), started again 3 seconds later, and the whole file arrived (49 s for the second try). `sha256sum` on the phone matches the original. One file, no leftover partial.
 - Seen while testing: (1) a break takes about 11 seconds to be noticed; (2) a retry sends the whole file again, because v1 cannot resume. Both cost time on big files: a resume from the byte already there (protocol v2, plan row 9) is the big win. (3) The "Verified" line was not seen on a screen: the test sender is a command line. It needs a send from the phone.
-- Not done: the SHA-256 mismatch path has no test; the Windows app does not have skip, retry or Verified yet.
+- Found later the same day: a receiver that cancelled in the middle of an upload only looked like one more broken connection, so the sender kept trying for 3 minutes (the Windows tests showed it; a new Kotlin test, `aReceiverThatCancelledEndsTheSendAtOnce`, failed the same way). Fix: before each new try the sender asks the receiver what became of the file with a PUT that has no body (`Sender.probe`; PROTOCOL.md 3.3 "Asking before a new try"). It also means a file that arrived after a lost reply is no longer sent a second time.
+- The Windows app now has skip, retry and Verified too (see its `PROGRESS.md`); the Windows conformance suite (40 cases, 4 new) passes against the Kotlin receiver as well.
+- Not done: the SHA-256 mismatch path has no Kotlin test (the Windows tests cover it).
 - Google Play: a checklist is under "Phase 5: release".
 
 ### 2026-10-07 (Share to anyone: ZIP fix and "add more", Android server)

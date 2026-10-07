@@ -220,6 +220,23 @@ class RetryAndSkipTest {
         }
     }
 
+    @Test
+    fun aReceiverThatCancelledEndsTheSendAtOnce() {
+        val big = Random(12).nextBytes(8 * 1024 * 1024)
+        CuttingProxy(rx.port, cutUploadAt = 200_000).use { proxy ->
+            val job = SendJob(clients, me(), device(proxy.port), listOf(item("big.bin", big)))
+            val t = thread { job.run() }
+            var waited = 0
+            while (!job.reconnecting && waited++ < 100) Thread.sleep(50)
+            assertTrue(job.reconnecting, "the connection was cut")
+            rx.cancel(job.offerId)
+            t.join(15_000)
+            assertTrue(!t.isAlive, "the send went on trying after the receiver cancelled")
+            assertEquals(SendJob.State.FAILED, job.state, job.message)
+            assertEquals(1, job.unfinished().size)
+        }
+    }
+
     // --- an old upload that went quiet
 
     @Test

@@ -320,6 +320,7 @@ class SendJob(
                 update(State.SENDING, "Sending")
             }
             try {
+                if (problem != null) probe(f, item, token, before)?.let { return it }
                 return uploadOnce(f, item, token, before)
             } catch (e: IOException) {
                 if (cancelled || fileFailure != null || e is SendException || Clients.mismatch(e) != null) throw e
@@ -333,6 +334,39 @@ class SendJob(
                 rate.reset()
                 problem = e
             }
+        }
+    }
+
+    /**
+     * Before a new try: asks the receiver what became of this file, with a PUT that has no body. A receiver checks the
+     * token, then whether the file is done or still arriving, then whether the send was cancelled, and only then the
+     * size, so the answer says what a real upload would hit: 409 done (the file arrived after all: returns the name it
+     * was saved as, nothing is sent again), 409 receiving ([StillReceiving]: wait and ask again), 403 or 410 (the send is
+     * over: [SendException]) and 400 wrong_size (the file can be sent again: returns null). Without it, a receiver that
+     * cancelled would only show up as one more broken connection, and the sender would keep trying for 3 minutes. An
+     * empty file needs no probe, as its real upload is just as small.
+     */
+    private fun probe(f: OfferFile, item: SendItem, token: String, before: Long): String? {
+        if (item.size == 0L) return null
+        val u = url(host, device.port, "/upload").toHttpUrl().newBuilder()
+            .addQueryParameter("offer", offerId).addQueryParameter("file", f.id).addQueryParameter("token", token)
+            .build()
+        val request = Request.Builder().url(u).put(ByteArray(0).toRequestBody("application/octet-stream".toMediaType())).build()
+        clients.pinned(device.id).newCall(request).also { call = it }.execute().use { r ->
+            val err = errorOf(r.bodyText())
+            if (r.code == 409 && err?.error == "already") {
+                when (err.state) {
+                    "done" -> {
+                        sent = before + item.size
+                        rate.add(sent)
+                        return err.name?.takeIf { it.isNotEmpty() } ?: f.name
+                    }
+                    "receiving" -> throw StillReceiving()
+                }
+            } else if (r.code == 403 || r.code == 410) {
+                throw SendException(Errors.refusal(r.code, err, device.name, saved.size, fileCount), err?.error ?: "")
+            }
+            return null
         }
     }
 
