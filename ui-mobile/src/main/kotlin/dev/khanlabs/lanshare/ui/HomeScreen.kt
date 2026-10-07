@@ -73,6 +73,7 @@ import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.WifiCode
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
+import dev.khanlabs.lanshare.transfer.HeldFiles
 import dev.khanlabs.lanshare.transfer.Items
 import dev.khanlabs.lanshare.transfer.UiState
 import kotlinx.coroutines.CoroutineScope
@@ -86,7 +87,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Files or text another app shared with this one, waiting for the person to pick a device. [deviceId] is set when
  * the person already picked one, in the Share menu or the app icon's menu.
  */
-data class Shared(val uris: List<Uri> = emptyList(), val text: String = "", val deviceId: String = "") {
+data class Shared(
+    val uris: List<Uri> = emptyList(),
+    val text: String = "",
+    val deviceId: String = "",
+    /** The files in [uris], being opened already (see Engine.holdFiles). */
+    val held: HeldFiles? = null,
+) {
     val isEmpty: Boolean get() = uris.isEmpty() && text.isEmpty()
 }
 
@@ -102,6 +109,8 @@ private class Pending(
     val items: List<SendItem> = emptyList(),
     val text: String = "",
     val fromShare: Boolean = false,
+    /** Opened already, in place of [uris]. */
+    val held: HeldFiles? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -207,8 +216,9 @@ fun HomeScreen(
         chatPeer = null
         val content = Pending(
             if (shared.uris.isEmpty()) "text" else itemsText(shared.uris.size, "item"),
-            uris = shared.uris, text = shared.text, fromShare = true,
+            uris = shared.uris, text = shared.text, fromShare = true, held = shared.held,
         )
+        pending?.held?.release() // an earlier share nobody picked a device for
         if (shared.deviceId.isEmpty()) {
             pending = content
             return@LaunchedEffect
@@ -281,8 +291,10 @@ fun HomeScreen(
             onLinkHandled()
         }
     }
-    fun closePending() {
+    /** Closes the device list. Files already opened for it are given back unless a send took them. */
+    fun closePending(sent: Boolean = false) {
         if (pending?.fromShare == true) onShareDone()
+        if (!sent) pending?.held?.release()
         pending = null
     }
 
@@ -390,8 +402,8 @@ fun HomeScreen(
     pending?.let { p ->
         DevicePickerSheet(p.what, s, onPick = { d ->
             sendPending(context, scope, d, p)
-            closePending()
-        }, onScan = { scanOpen = true }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = ::closePending)
+            closePending(sent = true)
+        }, onScan = { scanOpen = true }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = { closePending() })
     }
     chooseFor?.let { d ->
         WhatToSendSheet(d, onChoose = { kind -> dest = d; chooseFor = null; startPick(kind) }, onDismiss = { chooseFor = null })
@@ -485,8 +497,12 @@ private fun toast(context: Context, text: String) = Toast.makeText(context, text
 
 private fun sendPending(context: Context, scope: CoroutineScope, device: Device, p: Pending) {
     scope.launch {
-        val (fromUris, skipped) = if (p.uris.isEmpty()) emptyList<SendItem>() to 0
-                                  else withContext(Dispatchers.IO) { Items.fromUris(context, p.uris) }
+        val held = p.held
+        val (fromUris, skipped) = when {
+            held != null -> held.await()
+            p.uris.isEmpty() -> emptyList<SendItem>() to 0
+            else -> withContext(Dispatchers.IO) { Items.fromUris(context, p.uris) }
+        }
         if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
         val all = fromUris + p.items
         if (all.isNotEmpty() || p.text.isNotEmpty()) Engine.send(device, all, p.text)

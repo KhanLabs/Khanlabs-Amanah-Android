@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
@@ -40,6 +41,7 @@ import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.V1
 import dev.khanlabs.lanshare.store.Stores
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -716,6 +718,22 @@ object Engine : ReceiverEvents {
 
     private fun me() = Me(identity.id, name, "android", appLabel)
 
+    /**
+     * Opens files another app shared, right away and off the main thread, so the app can't take access back while the
+     * person picks a device. Pass the result to [send] by way of its items, or call its release if nothing is sent.
+     */
+    fun holdFiles(uris: List<Uri>): HeldFiles {
+        val result = CompletableDeferred<Pair<List<SendItem>, Int>>()
+        io.execute {
+            result.complete(try {
+                Items.fromUris(app, uris, hold = true)
+            } catch (e: Exception) {
+                emptyList<SendItem>() to uris.size // none could be read
+            })
+        }
+        return HeldFiles(result)
+    }
+
     fun send(device: Device, items: List<SendItem>, text: String) {
         val key = keys.incrementAndGet()
         val job = SendJob(clients, me(), device, items, text) { refresh() }
@@ -724,6 +742,8 @@ object Engine : ReceiverEvents {
         io.execute {
             val begun = System.currentTimeMillis()
             job.run()
+            // a failed or cancelled send keeps its files open for "Send the rest"; a finished or declined one is over
+            if (job.state == SendJob.State.DONE || job.state == SendJob.State.DECLINED) job.releaseItems()
             record(job, begun)
             refresh()
         }
@@ -813,13 +833,18 @@ object Engine : ReceiverEvents {
         val rest = job.unfinished()
         if (rest.isEmpty()) return
         val reached = job.sent > 0 || job.saved.isNotEmpty() || job.skipped > 0
-        dismissSend(key)
+        removeSend(key) // the files that did not get there stay open: the new send reads them
         send(job.device, rest, if (reached) "" else job.text)
     }
 
     fun dismissSend(key: Long) {
-        synchronized(lock) { jobs.remove(key) }
+        removeSend(key)?.releaseItems()
+    }
+
+    private fun removeSend(key: Long): SendJob? {
+        val job = synchronized(lock) { jobs.remove(key) }
         refresh()
+        return job
     }
 
     /** True if the device answers on one of its addresses with the same ID. Blocks for up to 3 s per address. */

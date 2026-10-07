@@ -27,6 +27,7 @@ import java.security.SecureRandom
 import java.util.Collections
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Another device, as discovery or "Add by IP" found it. [hosts] are its addresses, best first. */
 data class Device(
@@ -46,8 +47,29 @@ class SendException(message: String, val code: String = "") : IOException(messag
 /** The receiver still has an earlier try of this file open; ask again in a moment (PROTOCOL.md 3.3). */
 private class StillReceiving : IOException("the receiver is still busy with an earlier try")
 
-/** One thing to send: its name on the other side (already Windows-safe) and its bytes. [modified] is in milliseconds, 0 if unknown. */
-class SendItem(val name: String, val size: Long, val modified: Long = 0L, val open: () -> InputStream)
+/**
+ * One thing to send: its name on the other side (already Windows-safe) and its bytes. [modified] is in milliseconds, 0 if unknown.
+ * [onRelease] closes whatever is held open for the file (see Items.fromUris); [release] runs it once, however often it is called.
+ */
+class SendItem(
+    val name: String,
+    val size: Long,
+    val modified: Long = 0L,
+    private val onRelease: () -> Unit = {},
+    val open: () -> InputStream,
+) {
+    private val released = AtomicBoolean(false)
+
+    /** Nothing will read this file again. */
+    fun release() {
+        if (!released.compareAndSet(false, true)) return
+        try {
+            onRelease()
+        } catch (e: Exception) {
+            // already closed
+        }
+    }
+}
 
 /** Who this device is, as it tells others in an offer. */
 data class Me(val id: String, val name: String, val model: String, val app: String)
@@ -197,6 +219,14 @@ class SendJob(
         }
     }
 
+    /**
+     * Gives back every file still held open. Call it when the send is dismissed, or ended with nothing to continue.
+     * Not while "Send the rest" still needs [unfinished].
+     */
+    fun releaseItems() {
+        for (item in items) item.release()
+    }
+
     /** While waiting to try again: stop waiting and try now. */
     fun retryNow() {
         if (reconnecting) retrySignal.release()
@@ -290,6 +320,7 @@ class SendJob(
                 alreadyThere += i
                 skipped++
                 skippedBytes += f.size
+                items[i].release()
             }
         }
         total -= skippedBytes
@@ -302,6 +333,7 @@ class SendJob(
             current = f.name
             saved += upload(f, items[i], tokens[f.id] ?: "")
             finished += i
+            items[i].release() // a long send gives each file back as it goes
         }
         current = ""
         update(State.DONE, doneMessage())

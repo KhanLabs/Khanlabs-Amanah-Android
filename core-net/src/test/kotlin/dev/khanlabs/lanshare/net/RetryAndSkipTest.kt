@@ -114,6 +114,66 @@ class RetryAndSkipTest {
         assertEquals(listOf(SendJob.UNSENT, SendJob.UNSENT), job.results())
     }
 
+    // --- files held open (Items.fromUris with hold) are given back
+
+    /** An item that counts how often it was released. */
+    private fun held(name: String, data: ByteArray, released: AtomicInteger) =
+        SendItem(name, data.size.toLong(), 0L, onRelease = { released.incrementAndGet() }) { ByteArrayInputStream(data) }
+
+    @Test
+    fun releaseRunsOnceHoweverOftenItIsCalled() {
+        val count = AtomicInteger()
+        val it = held("a.txt", "x".toByteArray(), count)
+        it.release()
+        it.release()
+        it.release()
+        assertEquals(1, count.get())
+        SendItem("plain.txt", 1) { ByteArrayInputStream(ByteArray(1)) }.release() // nothing held: no error
+    }
+
+    @Test
+    fun aFinishedSendHasGivenEveryFileBack() {
+        val a = AtomicInteger()
+        val b = AtomicInteger()
+        val job = SendJob(clients, me(), device(), listOf(held("a.txt", "one".toByteArray(), a), held("b.txt", "two".toByteArray(), b)))
+        job.run()
+        assertEquals(SendJob.State.DONE, job.state, job.message)
+        assertEquals(1, a.get())
+        assertEquals(1, b.get())
+        job.releaseItems()
+        assertEquals(1, a.get(), "the Engine releases a finished send once more: still once")
+    }
+
+    @Test
+    fun filesTheReceiverAlreadyHasAreGivenBackToo() {
+        val data = "same".toByteArray()
+        SendJob(clients, me(), device(), listOf(item("a.txt", data), item("b.txt", data))).run()
+        val a = AtomicInteger()
+        val b = AtomicInteger()
+        val job = SendJob(clients, me("Test [skip]"), device(), listOf(held("a.txt", data, a), held("b.txt", data, b)))
+        job.run()
+        assertEquals(SendJob.State.DONE, job.state, job.message)
+        assertEquals(2, job.skipped)
+        assertEquals(1, a.get())
+        assertEquals(1, b.get())
+    }
+
+    @Test
+    fun aFileThatDidNotGetThereStaysHeldForSendTheRestUntilDismissed() {
+        val first = AtomicInteger()
+        val second = AtomicInteger()
+        val broken = SendItem("gone.txt", 3, 0L, onRelease = { second.incrementAndGet() }) { throw IOException("gone") }
+        val job = SendJob(clients, me(), device(), listOf(held("a.txt", "one".toByteArray(), first), broken))
+        job.run()
+        assertEquals(SendJob.State.FAILED, job.state, job.message)
+        assertEquals(1, first.get(), "the file that went across is given back at once")
+        assertEquals(0, second.get(), "the one that did not stays open: Send the rest reads it")
+        assertEquals(listOf(broken), job.unfinished())
+        job.releaseItems() // the person dismissed the card
+        assertEquals(1, first.get())
+        assertEquals(1, second.get())
+    }
+
     @Test
     fun sendsAgainWhenTheDateOrSizeDiffers() {
         val when1 = 1_700_000_000_000L

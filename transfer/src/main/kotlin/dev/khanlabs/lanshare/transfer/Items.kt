@@ -2,22 +2,34 @@ package dev.khanlabs.lanshare.transfer
 
 import android.content.Context
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.protocol.Names
 import dev.khanlabs.lanshare.protocol.V1
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import java.io.FileNotFoundException
 import java.io.IOException
 
 /** Turns picked or shared content into things to send, with names the Windows app accepts. */
 object Items {
-    /** Items for the URIs; the ones that can't be read are left out and counted in the second value. */
-    fun fromUris(context: Context, uris: List<Uri>): Pair<List<SendItem>, Int> {
+    /**
+     * Items for the URIs; the ones that can't be read are left out and counted in the second value.
+     *
+     * With [hold], each file that can be held is opened now and kept open until its item is released, so the app that
+     * shared it can't take its access back, or end, before the send reaches the file. A file that can't be held (the
+     * provider gives a pipe, or no descriptor) is opened later, as without [hold]. Only up to [MAX_HELD] files are held,
+     * to stay under the limit of open files.
+     */
+    fun fromUris(context: Context, uris: List<Uri>, hold: Boolean = false): Pair<List<SendItem>, Int> {
         val resolver = context.contentResolver
         val items = ArrayList<SendItem>()
         val used = HashSet<String>()
         var skipped = 0
+        var held = 0
         for ((i, uri) in uris.withIndex()) {
             var name: String? = null
             var size = -1L
@@ -36,13 +48,51 @@ object Items {
                 skipped++
                 continue
             }
+            var pfd: ParcelFileDescriptor? = null
+            if (hold && held < MAX_HELD) {
+                try {
+                    pfd = holdable(resolver.openFileDescriptor(uri, "r"))
+                } catch (e: SecurityException) {
+                    skipped++ // access is already gone
+                    continue
+                } catch (e: FileNotFoundException) {
+                    skipped++
+                    continue
+                } catch (e: Exception) {
+                    // opened later, from the URI
+                }
+            }
             var safe = Names.safePart(name ?: uri.lastPathSegment ?: "file-${i + 1}")
             var n = 1
             val base = safe
             while (!used.add(safe.lowercase())) safe = Names.numbered(base, n++) // two picks with one name
-            items += SendItem(safe, size, modified(context, uri)) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
+            if (pfd == null) {
+                items += SendItem(safe, size, modified(context, uri)) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
+            } else {
+                held++
+                val file = pfd
+                items += SendItem(safe, size, modified(context, uri), onRelease = { file.close() }) {
+                    // a copy of the descriptor shares the file position, so every try starts again from the first byte
+                    val stream = ParcelFileDescriptor.AutoCloseInputStream(file.dup())
+                    try {
+                        stream.channel.position(0)
+                    } catch (e: IOException) {
+                        stream.close()
+                        throw e
+                    }
+                    stream
+                }
+            }
         }
         return items to skipped
+    }
+
+    /** The descriptor if it is a real file (it can be read again from the start), else it is closed and this is null. */
+    private fun holdable(pfd: ParcelFileDescriptor?): ParcelFileDescriptor? {
+        if (pfd == null) return null
+        if (pfd.statSize >= 0) return pfd
+        pfd.close()
+        return null
     }
 
     /**
@@ -130,4 +180,21 @@ object Items {
     }
 
     private const val MAX_PATH = 1000 // the protocol allows 1024; this leaves room for "(n)"
+    private const val MAX_HELD = 200
+}
+
+/**
+ * Files another app shared, being opened as soon as they arrive (Engine.holdFiles). [await] gives the items once they
+ * are open; [release] gives them all back, for when the person never picks a device. A send that takes the items
+ * releases each file itself as it finishes.
+ */
+class HeldFiles internal constructor(private val result: Deferred<Pair<List<SendItem>, Int>>) {
+    suspend fun await(): Pair<List<SendItem>, Int> = result.await()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun release() {
+        result.invokeOnCompletion { error ->
+            if (error == null) result.getCompleted().first.forEach { it.release() }
+        }
+    }
 }

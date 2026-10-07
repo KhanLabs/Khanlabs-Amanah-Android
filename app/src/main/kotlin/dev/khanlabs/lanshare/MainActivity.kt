@@ -127,8 +127,11 @@ class MainActivity : ComponentActivity() {
             else -> return
         }
         val text = if (uris.isEmpty()) intent.getStringExtra(Intent.EXTRA_TEXT) ?: "" else ""
+        // the files are opened now, while the other app still lets this one read them, not when a device is picked
+        shared.held?.release() // an earlier share nobody sent is replaced by this one
+        val held = if (uris.isEmpty()) null else Engine.holdFiles(uris)
         // sent from a device in the Share menu: the system adds the shortcut's id
-        shared = Shared(uris, text, deviceId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID).orEmpty())
+        shared = Shared(uris, text, deviceId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID).orEmpty(), held = held)
     }
 
     private companion object {
