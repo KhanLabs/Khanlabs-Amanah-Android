@@ -248,7 +248,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 69 | Fix: PIN lockout is per IP only; add a cap for all IPs | Not started | n/a | n/a | R2 |
 | 70 | Fix: "Download all" zip has no length, so a cut download can look complete | Done 2026-10-06 (`zipplan.py`, shared with Share to anyone; a test shrinks a file mid-download and the client sees `IncompleteRead`). Not tried: 20 random cuts in real browsers | n/a | n/a | R2 |
 | 71 | Share to anyone: pick files, QR and link screen | Done | Done 2026-10-07 (run on the phone; the time limit ending and a second phone scanning are not tried) | Not started | R7; TV later |
-| 72 | Share to anyone page: grouped files, Download all, Range, PIN, time limit (no thumbnails: the page has no scripts) | Done | Done (tested over sockets) | n/a | R7 |
+| 72 | Share to anyone page: grouped files, Download all, Range, PIN, time limit (no thumbnails: the page has one tiny script that only checks whether the list changed); ZIP v2, Add more, checks before download | Done | Done (tested over sockets) | n/a | R7 |
 | 73 | Web page uploads with v2 chunks (resumable uploads from iPhones) | Not started | n/a | n/a | R10 (nice to have) |
 
 ### 3.8 TV, direct mode and distribution

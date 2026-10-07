@@ -47,7 +47,7 @@ Sending and receiving:
 
 Share to anyone (`docs/PLAN.md`, section 5.8; brought forward on 2026-10-06 at the owner's request):
 - [x] Pick files, folders or photos, then a screen with the QR code, link, PIN, live counts and Stop
-- [x] Browser page: Download everything as one ZIP (made while sending, exact length), a ZIP per folder, resume for single files; no photo thumbnails (the page has no scripts)
+- [x] Browser page: Download everything as one ZIP (made while sending, exact length), a ZIP per folder, resume for single files; no photo thumbnails (the page has one tiny script that only checks whether the list changed)
 - [x] Secret link, optional PIN with lockout, a time limit (15 min, 1 h, 4 h, until stopped); Stop cuts downloads
 - [x] "Get Amanah" card on the page: this phone's own APK and an "Open in Amanah" link
 - [ ] Tried on the phone and with a second phone
@@ -103,7 +103,7 @@ Must have:
 
 Nice to have:
 - [ ] Nearby list without a QR code (P2P service discovery)
-- [ ] 5 GHz group band
+- [x] 5 GHz group band (Wi-Fi Direct group with a band choice; 5745 MHz seen on the OnePlus 8T, 2026-10-07)
 - [ ] Wi-Fi Aware where supported
 
 Done when:
@@ -258,7 +258,7 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
   - The band choice shows. 5 GHz made `DIRECT-ZR-Amanah` on 5745 MHz (channel 149, 80 MHz wide); 2.4 GHz made `DIRECT-DD-Amanah` on 2412 MHz; the phone's own address was 192.168.49.1; the group started about 1 s after the tap and was gone after "Turn off". The phone stayed on its router Wi-Fi (2462 MHz) the whole time. The screen said "On 5 GHz" and "On 2.4 GHz" to match. Automatic still makes the old hotspot. The log showed "Wi-Fi Direct stopped working" after turning the network off, because Android calls the channel listener when the app closes the channel; fixed.
   - Share and Add more: 4 files shared, the PC opened the page (`/v` said 4.0.0), 2 files were added from the phone, `/v` said 6.0.0, and the page listed them first under "Just added" with their own ZIP. That ZIP holds only the 2 new files; "all" holds 6; every ZIP entry passes its CRC check and every SHA-256 in `/checksums.sha256` equals the original. ZIP answers carry an ETag and `Accept-Ranges: bytes`. After "Stop sharing" the page answers 410.
 - Not measured: real speed on the 5 GHz network (the PC has one Wi-Fi adapter, so joining the phone's network would cut the PC's own connection); a 2 GB ZIP in phone unzip apps; a cloud-only item; swiping the app out of Recents while sharing.
-- Checked: the app builds, 100 tests pass in `core-net`. **Not done yet:** the Windows app.
+- Checked: the app builds, 100 tests pass in `core-net`. The Windows app got the same ZIP, checks and "just added" page on 2026-10-08 (engine; see the Windows `PROGRESS.md`); its Add more button comes with the Qt Share tab.
 
 ### 2026-10-07 (Search this network, Android)
 - The "Not showing up?" sheet has a **Search this network** button (step 5), with a progress bar, a Stop button and a result line. `Engine.searchNetwork` runs `Scan.run` on a worker thread, keeps the devices it finds like ones added by address, and ends when the sheet closes. It runs only when tapped.
