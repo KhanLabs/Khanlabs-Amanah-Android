@@ -4,8 +4,8 @@
 |---|---|
 | Date | 2026-10-06 |
 | Owner | Khan (Islamabad, Pakistan) |
-| Windows app | Python and Tkinter, version 1.2.1, repo `KhanLabs/khanlabs-lanshare` |
-| Android app | Kotlin and Compose, version 0.1.0 (debug), repo `KhanLabs/khanlabs-lanshare-android` |
+| Windows app | Python and Tkinter, version 1.2.1, repo `KhanLabs/Khanlabs-Amanah-Windows` |
+| Android app | Kotlin and Compose, version 0.1.0 (debug), repo `KhanLabs/Khanlabs-Amanah-Android` |
 | Test phone | OnePlus 8T, Android 14, on the "Khan 2.4G" Wi-Fi |
 | Replaces | `docs/PLAN.md` in both repos (written 2026-10-05) |
 | Also uses | `docs/UI-RESEARCH.md`, `PROTOCOL.md`, `PROTOCOL-v2.md`, `PROGRESS.md` in both repos |

@@ -1,4 +1,4 @@
-> **Copy.** The master copy of this file is `PROTOCOL.md` in [KhanLabs/khanlabs-lanshare](https://github.com/KhanLabs/khanlabs-lanshare). If they differ, that one is right. Update both in the same change.
+> **Copy.** The master copy of this file is `PROTOCOL.md` in [KhanLabs/Khanlabs-Amanah-Windows](https://github.com/KhanLabs/Khanlabs-Amanah-Windows). If they differ, that one is right. Update both in the same change.
 
 # KhanLabs Send protocol, version 1
 

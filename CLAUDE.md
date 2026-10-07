@@ -1,6 +1,6 @@
 # Amanah (Android): main instructions
 
-The product was called KhanLabs LAN Share until 2026-10-06. The repo names (`khanlabs-lanshare`, `khanlabs-lanshare-android`), the code package (`dev.khanlabs.lanshare`) and the wire names (`_klshare._tcp`, `klshare://`) did not change.
+The product was called KhanLabs LAN Share until 2026-10-06. The repos were renamed on 2026-10-07 to `Khanlabs-Amanah-Windows` and `Khanlabs-Amanah-Android`. The code package (`dev.khanlabs.lanshare`) and the wire names (`_klshare._tcp`, `klshare://`) did not change.
 
 Read this first, then `PROGRESS.md` (where things stand) and `docs/PLAN.md` (the full plan, sections B, C and D matter most here).
 
@@ -12,7 +12,7 @@ One Android app for phones, tablets and Android TV (including Fire TV). It sends
 
 The goal is to be the best app for moving large files between phones and between every kind of Android device.
 
-The Windows app is a separate repo, `KhanLabs/khanlabs-lanshare`. The two apps must always be able to talk to each other.
+The Windows app is a separate repo, `KhanLabs/Khanlabs-Amanah-Windows`. The two apps must always be able to talk to each other.
 
 Current state: **the first phone build is being tested.** It speaks protocol v1 as sender and receiver. See `PROGRESS.md`.
 

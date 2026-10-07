@@ -19,7 +19,7 @@ Send large files, folders and text between Android phones, tablets, Android TV, 
 
 ## Works with
 
-The Windows app, [khanlabs-lanshare](https://github.com/KhanLabs/khanlabs-lanshare). Both apps speak the protocol in [docs/PROTOCOL.md](docs/PROTOCOL.md). Version 2 is being written in [docs/PROTOCOL-v2.md](docs/PROTOCOL-v2.md).
+The Windows app, [Khanlabs-Amanah-Windows](https://github.com/KhanLabs/Khanlabs-Amanah-Windows). Both apps speak the protocol in [docs/PROTOCOL.md](docs/PROTOCOL.md). Version 2 is being written in [docs/PROTOCOL-v2.md](docs/PROTOCOL-v2.md).
 
 ## Documents
 
