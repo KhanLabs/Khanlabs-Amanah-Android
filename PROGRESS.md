@@ -117,7 +117,24 @@ Done when:
 - [ ] Signed universal APK on GitHub Releases with SHA-256 checksums
 - [ ] A "Check for updates" button that only opens the website (no automatic checks; Obtainium users check by themselves)
 - [ ] User guide, including TV setup
-- [ ] Later: F-Droid or IzzyOnDroid (needs open source), Play Store build, LocalSend receive adapter
+- [ ] Later: F-Droid or IzzyOnDroid (needs open source), LocalSend receive adapter
+
+### Google Play (the owner said on 2026-10-07 the app goes to the Play Store)
+
+Checked online 2026-10-07: target API, foreground service declaration, self-update rule, closed test, 16 KB pages. The rest is from memory: confirm it in Play Console.
+
+- [x] Target API 36 (new apps and updates need it from 2026-08-31): `targetSdk = 36`
+- [ ] Release build signed with an upload key, built as an Android App Bundle (`bundleRelease`); turn on Play App Signing. No `signingConfig` yet.
+- [ ] 16 KB pages: only native `.so` files matter. The libraries look pure Java and Kotlin; confirm there is no `.so` in the built bundle.
+- [ ] Foreground service declaration in Play Console (App content): description, user impact if delayed or stopped, and a video, for each type. All types are reviewed. Now `dataSync`; feature 3 adds `connectedDevice` (Play lists "network connection" as a use case).
+- [ ] Start at boot (feature 3) is an opt-in setting, off by default, so the service only starts from something the person chose.
+- [x] No self-update: the "Amanah for Android" download on the share page is off on Play installs (split APKs, `Engine.kt` `hasInstaller`).
+- [ ] Privacy policy at a public URL (none exists yet)
+- [ ] Data safety form (no ads, no analytics, no accounts, nothing sent to the developer; files go only to devices the person picks)
+- [ ] Content rating questionnaire, target audience (not for children), ads declaration (no ads)
+- [ ] App access: reviewers need two devices, so write the steps or give a video
+- [ ] Store listing: name up to 30 characters, short description up to 80, icon 512x512, feature graphic 1024x500, at least 2 phone screenshots
+- [ ] Personal developer account made after 2023-11-13: closed test with 12 testers for 14 days before production. Organization accounts skip this. Account type not known yet.
 
 ## Test devices
 
@@ -166,6 +183,16 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 - Which payment service is behind `khanlabs.dev/support`? The page doesn't exist yet; today the link shows the home page.
 
 ## Log
+
+### 2026-10-07 (retry, skip files already here, Verified: Android)
+- Protocol (optional fields only, v1 unchanged): `mtime` on files, `skip_ok` on the offer, a `skip` map in the answer, `sha256` in the upload reply, `state` and `name` in the 409 error. Text is in `docs/PROTOCOL.md` (section 3.2 and 3.3).
+- Sender (`Sender.kt`): a broken connection is tried again inside the same offer, after 2, 4, 8, 15 and 30 seconds, for up to 3 minutes. A try that got 1 MB further than any earlier one starts the 3 minutes again. "Try now" skips the wait. A refusal, a file that can't be read, a different certificate and Cancel are final. The receiver's SHA-256 is compared with the sender's own; a mismatch says the file arrived damaged.
+- Receiver (`Receiver.kt`): finds files already here (same name and size, and the date within 2 seconds when both sides know it), skips them when the person leaves the checkbox on, takes over a half-received file when the sender comes back, answers 409 with the state, and sends the SHA-256.
+- Phone store (`Stores.kt`, `ReceivedIndex.kt`): MediaStore can't keep a file date, so a small list in `noBackupFilesDir` (`received-index.tsv`) holds the sender's date and name for each saved file. Android 6 to 9 sets the file date itself. An app only sees its own MediaStore files, so files from an earlier install are never "already here".
+- Screens: the offer sheet has "Skip N files already here" (on by default; the wording never says "identical"); the send card shows "Nothing new" and the skipped count, a "Try now" button while waiting to try again, "Send the rest" or "Try again" after a failed or cancelled send, and "Verified: every file arrived whole" when the receiver sent a SHA-256. Accept in the notification uses the same default (skip on).
+- Tests: 115 pass in `core-protocol` and `core-net` (10 in `RetryAndSkipTest`, 5 new in `ReceivedIndexTest`). `:app:compileDebugKotlin` passes. Not installed on a phone yet.
+- Not done: the SHA-256 mismatch path has no test; the Windows app does not have skip, retry or Verified yet; nothing was tried on a real phone.
+- Google Play: a checklist is under "Phase 5: release".
 
 ### 2026-10-07 (Share to anyone: ZIP fix and "add more", Android server)
 - Report from the owner: sharing 70 photos and 1 video to a phone without the app, "Download all" gave a video of 0 bytes, and there was no way to add files to a live share.

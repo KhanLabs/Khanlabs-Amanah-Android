@@ -174,10 +174,13 @@ internal fun IncomingCard(v: IncomingView) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("From ${v.senderName}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Muted("${countText(v.fileCount, v.total)}  ·  ${stateText(v)}")
+                    Muted("${whatText(v.fileCount - v.skipped, v.total, v.skipped)}  ·  ${stateText(v)}")
                 }
             }
-            if (v.state == "accepted" && v.fileCount > 0) {
+            if (v.skipped > 0 && v.state != "waiting") {
+                Muted(if (v.skipped == 1) "1 file was already here and left out" else "${v.skipped} files were already here and left out")
+            }
+            if (v.state == "accepted" && v.fileCount > v.skipped) {
                 Progress(v.received, v.total)
                 Muted("${Format.size(v.received)} of ${Format.size(v.total)}")
             }
@@ -224,12 +227,16 @@ internal fun FinishedActions(context: android.content.Context, saved: List<Strin
 internal fun stateText(v: IncomingView) = when (v.state) {
     "waiting" -> "waiting for your answer"
     "accepted" -> "receiving"
-    "done" -> if (v.fileCount == 0) "received" else "saved"
+    "done" -> if (v.fileCount == 0) "received" else if (v.saved.isEmpty() && v.skipped > 0) "all already here" else "saved"
     "declined" -> "declined"
     "expired" -> "not answered in time"
     "cancelled" -> "cancelled" + if (v.saved.isNotEmpty()) " (${v.saved.size} saved)" else ""
     else -> v.state
 }
+
+/** "3 files, 2 MB", or "Nothing new" when every file was left out because it is already there. */
+private fun whatText(files: Int, bytes: Long, skipped: Int) =
+    if (files == 0 && skipped > 0) "Nothing new" else countText(files, bytes)
 
 @Composable
 internal fun OutgoingCard(v: OutgoingView) {
@@ -240,8 +247,11 @@ internal fun OutgoingCard(v: OutgoingView) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("To ${v.deviceName}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Muted("${countText(v.fileCount, v.total)}  ·  ${v.message.ifEmpty { "Connecting" }}")
+                    Muted("${whatText(v.fileCount - v.skipped, v.total, v.skipped)}  ·  ${v.message.ifEmpty { "Connecting" }}")
                 }
+            }
+            if (v.state == SendJob.State.DONE && v.verified > 0) {
+                Muted(if (v.verified >= v.savedCount) "Verified: every file arrived whole" else "Verified ${v.verified} of ${v.savedCount} files")
             }
             val active = v.state == SendJob.State.CONNECTING || v.state == SendJob.State.WAITING || v.state == SendJob.State.SENDING
             if (v.state == SendJob.State.SENDING) {
@@ -250,7 +260,12 @@ internal fun OutgoingCard(v: OutgoingView) {
                     .filter { it.isNotEmpty() }.joinToString("  ·  "))
                 if (v.current.isNotEmpty()) Muted(v.current)
             }
+            val failed = v.state == SendJob.State.FAILED || v.state == SendJob.State.CANCELLED
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (v.reconnecting) TextButton(onClick = { Engine.retryNow(v.key) }) { Text("Try now") }
+                if (failed && v.unsent > 0) TextButton(onClick = { Engine.sendRest(v.key) }) {
+                    Text(if (v.unsent < v.fileCount) "Send the rest" else "Try again")
+                }
                 if (active) TextButton(onClick = { Engine.cancelSend(v.key) }) { Text("Cancel") }
                 else TextButton(onClick = { Engine.dismissSend(v.key) }) { Text("Dismiss") }
             }

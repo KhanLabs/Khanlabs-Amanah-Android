@@ -77,6 +77,11 @@ data class IncomingView(
     /** When the offer arrived and when it lapses if nobody answers, in milliseconds since 1970. */
     val created: Long,
     val expiresAt: Long,
+    /** Files (and their size) already in the receive folder, found when the offer came in. Only the sender's `skip_ok` fills this. */
+    val alreadyHere: Int = 0,
+    val alreadyBytes: Long = 0,
+    /** Files left out because the person kept "skip" on. */
+    val skipped: Int = 0,
 )
 
 /** One outgoing send, as the screens show it. */
@@ -92,6 +97,15 @@ data class OutgoingView(
     val etaSeconds: Long?,
     val current: String,
     val text: String,
+    /** Files the other device already had and left out of this send. */
+    val skipped: Int = 0,
+    /** Files saved on the other side so far, and how many of them it confirmed with the same SHA-256. */
+    val savedCount: Int = 0,
+    val verified: Int = 0,
+    /** The connection broke and the send waits to try again: the card shows "Try now". */
+    val reconnecting: Boolean = false,
+    /** Files that did not get across and are not already there: what "Send the rest" would send. */
+    val unsent: Int = 0,
 )
 
 /** The share to someone without Amanah, as the screens show it. Null in [UiState.share] when none is set up. */
@@ -330,9 +344,12 @@ object Engine : ReceiverEvents {
         main.post { discovery?.refresh() }
     }
 
-    /** The person's answer to an incoming send. */
-    fun answer(offerId: String, accept: Boolean) {
-        io.execute { receiver?.answer(offerId, accept) }
+    /**
+     * The person's answer to an incoming send. [skip] leaves out the files already here; it is on by default, like the
+     * checkbox on the offer, so Accept in the notification does the same as Accept on the sheet.
+     */
+    fun answer(offerId: String, accept: Boolean, skip: Boolean = true) {
+        io.execute { receiver?.answer(offerId, accept, skip) }
         Notifications.cancelOffer(app, offerId)
     }
 
@@ -350,7 +367,7 @@ object Engine : ReceiverEvents {
         synchronized(lock) { offers[offer.id] = offer }
         if (conformance) {
             val n = offer.sender.name
-            if ("[wait]" !in n) io.execute { receiver?.answer(offer.id, "[decline]" !in n) }
+            if ("[wait]" !in n) io.execute { receiver?.answer(offer.id, "[decline]" !in n, "[skip]" in n) }
         } else {
             Notifications.offer(app, view(offer))
         }
@@ -371,10 +388,12 @@ object Engine : ReceiverEvents {
             return
         }
         val v = view(offer)
-        if (!conformance && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
+        // every file was already here and nothing else came with it: the card says so, no notification or history entry
+        val nothingNew = offer.files.isNotEmpty() && offer.files.all { it.skipped } && offer.text.isEmpty()
+        if (!conformance && !nothingNew && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
             Notifications.received(app, v)
         }
-        if (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty())) {
+        if (!nothingNew && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
             history.add(HistoryEntry("in:${offer.id}", true, v.senderName, if (offer.state == "done") "done" else "partial",
                 v.saved.size, v.received, System.currentTimeMillis(), v.saved.take(History.MAX_NAMES), v.text))
         }
@@ -396,6 +415,9 @@ object Engine : ReceiverEvents {
         firstNames = o.files.take(3).map { it.name },
         created = o.created,
         expiresAt = o.created + V1.OFFER_TIMEOUT_S * 1000,
+        alreadyHere = o.already.size,
+        alreadyBytes = o.already.sumOf { it.size },
+        skipped = o.files.count { it.skipped },
     )
 
     // --- messages
@@ -528,7 +550,9 @@ object Engine : ReceiverEvents {
             else -> return
         }
         if (state == "failed") logFailure("send to ${job.device.name}", job)
-        history.add(HistoryEntry("out:${job.offerId}", false, job.device.name, state, job.items.size,
+        val count = job.items.size - job.skipped
+        if (state == "done" && job.items.isNotEmpty() && count == 0) return // nothing new went across
+        history.add(HistoryEntry("out:${job.offerId}", false, job.device.name, state, count,
             if (state == "done") job.total else job.sent, System.currentTimeMillis(),
             job.items.take(History.MAX_NAMES).map { it.name }, job.text, if (state == "failed") job.message else ""))
     }
@@ -569,6 +593,24 @@ object Engine : ReceiverEvents {
 
     fun cancelSend(key: Long) {
         synchronized(lock) { jobs[key] }?.cancel()
+    }
+
+    /** "Try now" on a send that is waiting to try again. */
+    fun retryNow(key: Long) {
+        synchronized(lock) { jobs[key] }?.retryNow()
+    }
+
+    /**
+     * "Send the rest": a new offer to the same device with what a failed or cancelled send did not get across. The old
+     * card goes away. The text goes again only when nothing was accepted yet, so it is never shown twice.
+     */
+    fun sendRest(key: Long) {
+        val job = synchronized(lock) { jobs[key] } ?: return
+        val rest = job.unfinished()
+        if (rest.isEmpty()) return
+        val reached = job.sent > 0 || job.saved.isNotEmpty() || job.skipped > 0
+        dismissSend(key)
+        send(job.device, rest, if (reached) "" else job.text)
     }
 
     fun dismissSend(key: Long) {
@@ -939,7 +981,8 @@ object Engine : ReceiverEvents {
                 incoming = offers.values.reversed().map { view(it) },
                 outgoing = jobs.entries.reversed().map { (k, j) ->
                     OutgoingView(k, j.device.name, j.state, j.message, j.items.size, j.sent, j.total, j.speed,
-                        j.etaSeconds, j.current, j.text)
+                        j.etaSeconds, j.current, j.text, j.skipped, j.saved.size, j.verified, j.reconnecting,
+                        j.unfinished().size)
                 },
                 conformanceAllowed = debugBuild,
                 conformance = conformance,

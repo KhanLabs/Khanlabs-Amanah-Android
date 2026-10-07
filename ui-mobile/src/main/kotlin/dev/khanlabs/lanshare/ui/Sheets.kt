@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.net.Device
+import dev.khanlabs.lanshare.store.Stores
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.IncomingView
 import dev.khanlabs.lanshare.transfer.UiState
@@ -109,6 +111,10 @@ internal fun OfferSheet(v: IncomingView) {
     val left = ((v.expiresAt - now + 999) / 1000).coerceAtLeast(0)
     val fraction = ((v.expiresAt - now).toFloat() / (v.expiresAt - v.created).coerceAtLeast(1)).coerceIn(0f, 1f)
     var whyOpen by remember { mutableStateOf(false) }
+    // on by default: files already here are left out unless the person turns this off
+    var skip by remember(v.id) { mutableStateOf(true) }
+    val newCount = v.fileCount - if (skip) v.alreadyHere else 0
+    val newBytes = v.total - if (skip) v.alreadyBytes else 0
     Sheet(onDismiss = {}, locked = true, footer = {
         Muted("Answer within ${clock(left)}")
         LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 16.dp))
@@ -117,14 +123,25 @@ internal fun OfferSheet(v: IncomingView) {
             OutlinedButton(onClick = { Engine.answer(v.id, false) }, Modifier.weight(1f), contentPadding = tight) {
                 Text("Decline", maxLines = 1, softWrap = false)
             }
-            Button(onClick = { Engine.answer(v.id, true) }, Modifier.weight(1f), contentPadding = tight) {
+            Button(onClick = { Engine.answer(v.id, true, skip) }, Modifier.weight(1f), contentPadding = tight) {
                 Text("Accept", maxLines = 1, softWrap = false)
             }
         }
     }) {
         Text("${v.senderName} wants to send you", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
-        Text(countText(v.fileCount, v.total), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Text(if (v.fileCount > 0 && newCount == 0) "Nothing new" else countText(newCount, newBytes),
+            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        if (v.alreadyHere > 0) {
+            Row(Modifier.fillMaxWidth().clickable { skip = !skip }.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = skip, onCheckedChange = { skip = it })
+                Column(Modifier.weight(1f)) {
+                    Text(if (v.alreadyHere == 1) "Skip 1 file already here" else "Skip ${v.alreadyHere} files already here",
+                        style = MaterialTheme.typography.bodyLarge)
+                    Muted("Same name and size as files in ${Stores.SHOWN_PATH}. Turn off to get a second copy.")
+                }
+            }
+        }
         if (v.fileCount > 0) {
             Spacer(Modifier.height(8.dp))
             for (n in v.firstNames) {

@@ -153,11 +153,11 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 6 | Cancel a transfer | Done | Partly: receiver side passes conformance; sender side not tested on the phone | Not started | A: R1 (test) |
 | 7 | Keep the device awake during a transfer | Done | Done (wake lock, Wi-Fi lock, foreground service) | Not started | Done |
 | 8 | Protocol v2: sessions, chunks with SHA-256, batches for small files, parallel connections | Partly: spec, reference code `klv2.py`, test vectors | Partly: `core-protocol` passes all vectors; no transport | Not started | W: R3, A: R4 |
-| 9 | Resume after any drop, kill or reboot (journal) | Not started | Not started | Not started | W: R3, A: R4 |
-| 10 | "Verified" mark after the file digest matches | Not started | Not started | Not started | W: R3, A: R4 |
+| 9 | Resume after any drop, kill or reboot (journal) | Not started | Partly 2026-10-07: a broken send is tried again inside the same offer (the whole file again; no journal, nothing after a kill or reboot) | Not started | W: R3, A: R4 |
+| 10 | "Verified" mark after the file digest matches | Not started | Done 2026-10-07 for the sender (compares the receiver's SHA-256 with its own; JVM tests, not tried on a phone) | Not started | W: R3, A: R4 |
 | 11 | No file-count limit (manifest pages), modified times, empty folders | Not started | Not started | Not started | W: R3, A: R4 |
 | 12 | Free-space and FAT32 4 GB check before accepting | Not started | Not started | Not started | W: R3, A: R4 |
-| 13 | Skip identical files when a folder is sent again | Not started | Not started | Not started | R4 (nice to have) |
+| 13 | Skip files already there when a folder is sent again | Not started | Done 2026-10-07: the receiver finds them (name, size, date), a checkbox on the offer is on by default, the sender leaves them out; the phone keeps file dates in `received-index.tsv`; JVM tests, not tried on a phone | Not started | R4 (nice to have) |
 | 14 | Choose which files to accept | Not started | Not started | Not started | R6 (nice to have) |
 | 15 | Send to several devices at once | Not started | Not started | n/a | R6 (nice to have) |
 | 16 | Command line `klshare send` | Not started | n/a | n/a | R6 (nice to have) |
@@ -208,8 +208,8 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 44 | Background transfers: user-initiated data transfer jobs on Android 14+ | n/a | Partly: `dataSync` foreground service only | Not started | R4 |
 | 45 | Handle Android 15's 6-hour `dataSync` limit cleanly | n/a | Done 2026-10-07 (`onTimeout` posts Receiving paused and stops; not tried on Android 15; no resume list because v1 cannot resume) | Not started | R2 |
 | 46 | Read shared files at the moment they are shared, not later | n/a | Not started (known gap) | n/a | R2 |
-| 47 | Activity / History list | Done | Not started | Not started | A: R6 |
-| 48 | Open, Show in folder and Share after receiving | Done | Not started | Not started | A: R6 |
+| 47 | Activity / History list | Done | Done (Activity tab) | Not started | Done |
+| 48 | Open, Show in folder and Share after receiving | Done | Done (Open, Show, Share on the card and in Activity) | Not started | Done |
 
 ### 3.5 Ways to send and the main UI
 
@@ -259,7 +259,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 75 | TV: open files with other apps, install APKs, in-app file browser | n/a | n/a | Not started | R8 |
 | 76 | Direct mode: Wi-Fi Direct phone to phone, started by QR | n/a | Not started | Not started | R9 |
 | 77 | Direct mode: LocalOnlyHotspot fallback, `POST /hello` | n/a | Not started | Not started | R9 |
-| 78 | Windows joins a phone's group as normal Wi-Fi | Not started | n/a | n/a | R9 |
+| 78 | Windows joins a phone's group as normal Wi-Fi | Done in code 2026-10-06 (`wifi_join.py`, 26 tests with a fake `netsh`; no real join tried) | n/a | n/a | R9 |
 | 79 | CI on both repos | Not started | Not started | n/a | R1 |
 | 80 | Signed release builds with checksums, public download page | Partly: unsigned exe built | Not started | Not started | R5 |
 | 81 | Android developer verification registration | n/a | Not started | Not started | R5 |
