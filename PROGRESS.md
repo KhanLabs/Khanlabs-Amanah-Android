@@ -167,6 +167,22 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-07 (Share to anyone: ZIP fix and "add more", Android server)
+- Report from the owner: sharing 70 photos and 1 video to a phone without the app, "Download all" gave a video of 0 bytes, and there was no way to add files to a live share.
+- Most likely cause of the 0 bytes: the old ZIP stored every file with a "data descriptor" (size and checksum written after the file, zeros in the header). Programs that read a ZIP from the front, which is what most phone unzip apps do, cannot unpack that. Java's own `ZipInputStream` refuses it ("only DEFLATED entries can have EXT descriptor"). The new test unzips the ZIP both ways.
+- Checked on the OnePlus 8T with a 2.38 GB share (75 photos and a 2.1 GB video): one full ZIP download with nothing else running took 319 s (7.5 MB/s). 76 entries, every CRC fine, and the video equals the original except the first 1 MB, where Android removes the GPS location from video it hands to other apps. An earlier result that looked like a 1.18 GB hole of zeros came from two of my own test scripts writing the same output file at the same time. It was not the server.
+- Speed limit seen: the phone's hotspot and its router connection share one 2.4 GHz channel (channel 11, 20 MHz), so a 2 GB share takes 5 to 7 minutes at best. Chrome could not resume a broken download because there was no `ETag` and the ZIP said `Accept-Ranges: none`.
+- New in `core-net` (server only, the screens come next):
+  - `ZipPlan` v2: stored entries with the real size and CRC-32 in every header, no data descriptor, the file's modified time, ZIP64 when needed (also at exactly 65,535 entries), any byte range, an `ETag`. While a whole file is written its CRC is worked out again and the last piece is held back until it matches, so a changed file ends the download short and never arrives whole but wrong.
+  - Each file is read once before it is offered (real size, CRC-32, SHA-256). Until then the page says "Getting ready" and the file answers 503 with `Retry-After`. A file that cannot be read, or is shorter than the picker said, is listed as failed, never dropped without a word.
+  - `ShareServer.addFiles`: more files into a live share. Ids are never reused, so old links keep their meaning; a clashing name gets a number. Visitors who already looked see the new files at the top under "Just added" with a New tag and their own ZIP; downloaded files are marked. The list page has one small script (allowed by a hash in the Content-Security-Policy) that checks `/v` every 5 seconds and shows "The list was updated"; without scripts the page reloads every 30 seconds.
+  - ZIPs are made from frozen lists, in parts under 1.9 GB (a bigger file is not zipped, it downloads on its own), so a ZIP never passes 2 GiB where many unzip apps break. All downloads support `Range`, `If-Range` and a strong `ETag`.
+  - `/checksums.sha256` lists the SHA-256 of every ready file.
+  - The "Open in Amanah" link on the page no longer carries the Wi-Fi name and password.
+  - A stalled download is cut after 90 s with no byte (the browser can resume it). The 17th connection from one address gets 503 with `Retry-After` instead of silence.
+  - Optional private copy of each file made during the first read (`stash`), used for files of unknown size; off for the rest.
+- Checked: the app builds, 100 tests pass in `core-net`. **Not done yet:** the phone screens (Add more, per-file state), the Windows app, a device test.
+
 ### 2026-10-07 (Search this network, Android)
 - The "Not showing up?" sheet has a **Search this network** button (step 5), with a progress bar, a Stop button and a result line. `Engine.searchNetwork` runs `Scan.run` on a worker thread, keeps the devices it finds like ones added by address, and ends when the sheet closes. It runs only when tapped.
 - "Add by IP" now shows the plain messages from `Errors.addByIp` (for example "Nothing answered at 192.168.1.9. Check the address, and that Amanah is open there with Receiving on.").

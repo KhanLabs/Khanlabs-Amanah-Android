@@ -41,7 +41,7 @@ data class Device(
 class SendException(message: String, val code: String = "") : IOException(message)
 
 /** One thing to send: its name on the other side (already Windows-safe) and its bytes. */
-class SendItem(val name: String, val size: Long, val open: () -> InputStream)
+class SendItem(val name: String, val size: Long, val modified: Long = 0L, val open: () -> InputStream)
 
 /** Who this device is, as it tells others in an offer. */
 data class Me(val id: String, val name: String, val model: String, val app: String)

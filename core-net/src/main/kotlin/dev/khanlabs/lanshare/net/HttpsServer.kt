@@ -16,8 +16,11 @@ import java.net.Socket
 import java.net.SocketException
 import java.net.URLDecoder
 import java.util.Collections
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
@@ -38,6 +41,13 @@ class Exchange internal constructor(
     var bodyRead = false
     var answered = false
         private set
+
+    /** Closes the connection under a running answer. Set by the server that made this exchange. */
+    internal var onCut: (() -> Unit)? = null
+
+    fun cut() {
+        onCut?.invoke()
+    }
 
     /** Closes the connection without an answer, as when the sender went silent in the middle of a body. */
     fun hangUp() {
@@ -138,6 +148,7 @@ class Exchange internal constructor(
             431 -> "Request Header Fields Too Large"
             500 -> "Internal Server Error"
             501 -> "Not Implemented"
+            503 -> "Service Unavailable"
             507 -> "Insufficient Storage"
             else -> "Status"
         }
@@ -192,6 +203,7 @@ class HttpsServer(
         closeQuietly(server)
         synchronized(open) { open.toList() }.forEach { closeQuietly(it) }
         pool.shutdownNow()
+        turnAways.shutdownNow()
     }
 
     /** Drops every connection that is open now (downloads in progress) and keeps listening. */
@@ -207,8 +219,8 @@ class HttpsServer(
                 if (stopped) return else continue
             }
             val ip = s.inetAddress.hostAddress ?: ""
-            if (!admit(ip)) { // over the limit: closed at once, before a thread starts
-                closeQuietly(s)
+            if (!admit(ip)) { // over the limit: answered or closed at once, before a thread starts
+                if (tls == null) turnAway(s) else closeQuietly(s)
                 continue
             }
             open += s
@@ -229,6 +241,46 @@ class HttpsServer(
                 closeQuietly(s)
                 release(ip)
             }
+        }
+    }
+
+    /**
+     * A plain-HTTP visitor over the limit gets a short "busy, try again" instead of a silent hang-up, so a browser
+     * or download manager waits and retries. One helper thread with a short queue does it, so a flood of
+     * connections can't make the server start a thread for each; when the queue is full the connection is just closed.
+     */
+    private val turnAways = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(32),
+        { r -> Thread(r, "klshare-busy").apply { isDaemon = true } }) { task, _ -> (task as? BusyTask)?.give() }
+
+    private inner class BusyTask(private val s: Socket) : Runnable {
+        override fun run() {
+            try {
+                s.soTimeout = 300
+                s.getOutputStream().write(BUSY)
+                s.getOutputStream().flush()
+                s.shutdownOutput()
+                // read what the visitor sent, so closing doesn't reset the connection and lose the answer
+                val sink = ByteArray(4096)
+                try {
+                    while (s.getInputStream().read(sink) >= 0) { /* discard */ }
+                } catch (e: IOException) {
+                    // slow or gone
+                }
+            } catch (e: IOException) {
+                // gone already
+            } finally {
+                give()
+            }
+        }
+
+        fun give() = closeQuietly(s)
+    }
+
+    private fun turnAway(s: Socket) {
+        try {
+            turnAways.execute(BusyTask(s))
+        } catch (e: Exception) {
+            closeQuietly(s)
         }
     }
 
@@ -254,6 +306,7 @@ class HttpsServer(
         s.soTimeout = idleTimeoutMs
         val output = BufferedOutputStream(s.getOutputStream(), 64 * 1024)
         val exchange = readRequest(input, output, ip) ?: return
+        exchange.onCut = { closeQuietly(s) }
         handler(exchange)
         if (!exchange.answered) exchange.fail(500, "failed", "No answer")
         output.flush()
@@ -294,6 +347,7 @@ class HttpsServer(
         val input = BufferedInputStream(secure.inputStream, 64 * 1024)
         val output = BufferedOutputStream(secure.outputStream, 64 * 1024)
         val exchange = readRequest(input, output, ip) ?: return
+        exchange.onCut = { closeQuietly(s) }
         handler(exchange)
         if (!exchange.answered) exchange.fail(500, "failed", "No answer")
         output.flush()
@@ -361,6 +415,9 @@ class HttpsServer(
     companion object {
         const val TLS_HANDSHAKE = 0x16 // the first byte of every TLS connection
         const val HANDSHAKE_TIMEOUT_MS = 15_000
+        private val BUSY = ("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\n" +
+            "Content-Type: text/plain\r\nContent-Length: 25\r\nConnection: close\r\n\r\n" +
+            "Busy. Try again shortly.\n").toByteArray(Charsets.ISO_8859_1)
         private const val MAX_LINE = 8192
         private const val MAX_HEADERS = 100
 
