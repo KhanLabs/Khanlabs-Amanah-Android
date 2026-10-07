@@ -105,6 +105,12 @@ internal fun SettingsTab(
                     }
                 }
                 Rule()
+                SettingRow(
+                    "Start when the phone starts",
+                    if (s.bootStart) "On. After the phone restarts, Amanah starts receiving by itself and shows a notification while it listens."
+                    else "Off. After the phone restarts, open Amanah once to receive.",
+                ) { Switch(checked = s.bootStart, onCheckedChange = { Engine.setBootStart(it) }) }
+                Rule()
                 SettingRow("Save files to", s.folder, onClick = { pickFolder.launch(null) }) {
                     TextButton(onClick = { pickFolder.launch(null) }) { Text("Change") }
                 }

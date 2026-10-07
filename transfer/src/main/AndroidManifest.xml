@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Receiving files from devices on the Wi-Fi is a network connection to another device. Unlike dataSync this type has
+         no daily time limit on Android 15, and a boot receiver may start it. It also needs one of the network permissions
+         below (CHANGE_WIFI_MULTICAST_STATE, CHANGE_WIFI_STATE, CHANGE_NETWORK_STATE). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Only used when the person turns on "Start receiving when the phone starts" in Settings. Off by default. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Android 17 asks before an app talks to devices on the local network. Older versions ignore this line. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
@@ -32,10 +38,19 @@
         <service
             android:name=".TransferService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="connectedDevice|dataSync" />
 
         <receiver
             android:name=".ActionReceiver"
             android:exported="false" />
+
+        <!-- Starts receiving after the phone restarts, only when Settings says so (see BootStart) -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

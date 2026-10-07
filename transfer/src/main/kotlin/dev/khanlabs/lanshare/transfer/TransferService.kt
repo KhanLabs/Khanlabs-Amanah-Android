@@ -76,9 +76,27 @@ class TransferService : Service() {
         }
     }
 
+    /** Set once the phone has refused [ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE]: the service then runs as dataSync. */
+    private var dataSyncOnly = false
+
+    /**
+     * Shows the ongoing notification and keeps the process alive. The type is connectedDevice (a network link to another
+     * device): it has no daily limit and may be started after the phone boots. A phone that refuses it gets dataSync,
+     * which Android 15 limits to 6 hours a day (see [onTimeout]).
+     */
     private fun goForeground(text: String) {
-        val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-        ServiceCompat.startForeground(this, Notifications.SERVICE_ID, Notifications.service(this, text), type)
+        val notification = Notifications.service(this, text)
+        if (Build.VERSION.SDK_INT < 29) return ServiceCompat.startForeground(this, Notifications.SERVICE_ID, notification, 0)
+        if (!dataSyncOnly) {
+            try {
+                return ServiceCompat.startForeground(this, Notifications.SERVICE_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } catch (e: SecurityException) {
+                dataSyncOnly = true
+                Engine.noteProblem("this phone refused the connectedDevice service type, using dataSync: ${e.message}")
+            }
+        }
+        ServiceCompat.startForeground(this, Notifications.SERVICE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -88,8 +106,9 @@ class TransferService : Service() {
     }
 
     /**
-     * Android 15 limits dataSync services to 6 hours a day. The service must stop within seconds, so it says why and
-     * stops; the timer starts again when the person opens the app.
+     * Android 15 limits dataSync services to 6 hours a day; connectedDevice has no such limit, so this only runs for a
+     * phone that refused that type. The service must stop within seconds, so it says why and stops; the timer starts
+     * again when the person opens the app.
      */
     override fun onTimeout(startId: Int, fgsType: Int) {
         Notifications.paused(this)

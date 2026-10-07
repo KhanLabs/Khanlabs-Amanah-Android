@@ -188,6 +188,8 @@ data class UiState(
     val showInactive: Boolean = true,
     /** The Settings switch: a short buzz when a transfer ends. On by default; the phone's own touch feedback setting still applies. */
     val haptics: Boolean = true,
+    /** The Settings switch: start receiving when the phone starts (see [BootStart]). Off until the person turns it on. */
+    val bootStart: Boolean = BootStart.DEFAULT,
     /** The Settings choice of turning receiving off by itself: never, hour or network (see [AutoOff]). */
     val autoOff: String = AutoOff.NEVER,
     /** Why receiving is off when it turned itself off, in words for the status card; empty once it is turned on again. */
@@ -349,6 +351,19 @@ object Engine : ReceiverEvents {
     fun setHaptics(on: Boolean) {
         prefs.edit().putBoolean("haptics", on).apply()
         refresh()
+    }
+
+    /** Whether receiving starts by itself when the phone starts. Off until the person turns it on in Settings. */
+    val bootStart: Boolean get() = prefs.getBoolean("boot_start", BootStart.DEFAULT)
+
+    fun setBootStart(on: Boolean) {
+        prefs.edit().putBoolean("boot_start", on).apply()
+        refresh()
+    }
+
+    /** Writes a line to the error log that "Copy error report" gives, for a problem outside the Engine (a receiver, a service). */
+    fun noteProblem(text: String) {
+        errors.add(text)
     }
 
     fun setStartTab(tab: String) {
@@ -1287,6 +1302,7 @@ object Engine : ReceiverEvents {
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 allowVpn = allowVpn,
                 haptics = haptics,
+                bootStart = bootStart,
                 autoOff = autoOff,
                 autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
                 folder = saveFolder,

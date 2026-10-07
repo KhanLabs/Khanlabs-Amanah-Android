@@ -206,7 +206,7 @@ Every screen shows "Made with ♥ by Khan" at the bottom.
 | 42 | Own receive folder (`Downloads\KhanLabs`, `Download/KhanLabs`) | Done | Done (MediaStore with `IS_PENDING`) | Not started | Done |
 | 43 | Pick another save folder (SAF on Android) | Done | Done 2026-10-08 in code (Settings, Save files to; not tried on a phone) | Not started | A: R4 |
 | 44 | Background transfers: user-initiated data transfer jobs on Android 14+ | n/a | Partly: `dataSync` foreground service only | Not started | R4 |
-| 45 | Handle Android 15's 6-hour `dataSync` limit cleanly | n/a | Done 2026-10-07 (`onTimeout` posts Receiving paused and stops; not tried on Android 15; no resume list because v1 cannot resume) | Not started | R2 |
+| 45 | Handle Android 15's 6-hour `dataSync` limit cleanly | n/a | Done 2026-10-07 (`onTimeout` posts Receiving paused and stops; not tried on Android 15; no resume list because v1 cannot resume). 2026-10-08: the service now runs as `connectedDevice`, which has no limit; `dataSync` is only the fallback. Not tried on Android 15 | Not started | R2 |
 | 46 | Read shared files at the moment they are shared, not later | n/a | Not started (known gap) | n/a | R2 |
 | 47 | Activity / History list | Done | Done (Activity tab) | Not started | Done |
 | 48 | Open, Show in folder and Share after receiving | Done | Done (Open, Show, Share on the card and in Activity) | Not started | Done |
