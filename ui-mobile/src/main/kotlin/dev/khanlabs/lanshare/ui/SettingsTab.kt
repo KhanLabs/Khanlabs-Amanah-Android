@@ -3,6 +3,8 @@ package dev.khanlabs.lanshare.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.UiState
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsTab(
     s: UiState,
@@ -90,6 +93,32 @@ internal fun SettingsTab(
                     }
                     Spacer(Modifier.width(8.dp))
                     Switch(checked = s.allowVpn, onCheckedChange = { Engine.setAllowVpn(it) })
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Tab shown when you open Amanah", style = MaterialTheme.typography.titleMedium)
+                    Muted("Pick the tab you want to see first.")
+                    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (t in Tab.entries) FilterChip(
+                            selected = s.startTab == t.name, onClick = { Engine.setStartTab(t.name) },
+                            label = { Text(t.label) },
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            Card {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Show devices that are not nearby", style = MaterialTheme.typography.titleMedium)
+                        Muted("On: devices you saved that do not answer are listed under Not nearby, and you can remove them. Off: the Send tab lists only devices found right now. Saved devices stay saved and come back when they are nearby.")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = s.showInactive, onCheckedChange = { Engine.setShowInactive(it) })
                 }
             }
         }

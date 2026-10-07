@@ -1,17 +1,21 @@
 package dev.khanlabs.lanshare.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-/** The Windows app's colors (brand.py): near-black paper, dark cards, a teal accent. */
-private val Paper = Color(0xFF080A0E)
-private val Card = Color(0xFF12151B)
-private val Card2 = Color(0xFF181C24)
-private val Hover = Color(0xFF1F2530)
+/** Near-black paper, soft dark cards and the teal accent of the Windows app (brand.py). The cards are a little lighter
+ *  than the paper so their rounded edges show. */
+private val Paper = Color(0xFF0D0F12)
+private val Card = Color(0xFF171A1F)
+private val Card2 = Color(0xFF1D2128)
+private val Hover = Color(0xFF262B33)
 private val Ink = Color(0xFFE7EAEF)
 private val Muted = Color(0xFF97A0AD)
 private val Border = Color(0xFF2F3742)
@@ -55,7 +59,28 @@ private val Light = lightColorScheme(
     error = Color(0xFFC62828),
 )
 
+/** Round corners everywhere: cards, sheets and dialogs. A card is 24 dp, a big tile 28 dp. */
+private val Rounded = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(24.dp),
+    large = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(32.dp),
+)
+
+/** The colors of the icons on the Send tab's tiles. Each pair is the light and dark version, so the icon reads on both. */
+internal enum class Accent(private val light: Long, private val dark: Long) {
+    Blue(0xFF0277BD, 0xFF4FC3F7),
+    Green(0xFF047857, 0xFF34D399),
+    Amber(0xFFB45309, 0xFFFBBF24),
+    Pink(0xFFBE185D, 0xFFF472B6),
+    Violet(0xFF6D28D9, 0xFFA78BFA);
+
+    @Composable
+    fun color(): Color = Color(if (isSystemInDarkTheme()) dark else light)
+}
+
 @Composable
 fun LanShareTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, shapes = Rounded, content = content)
 }

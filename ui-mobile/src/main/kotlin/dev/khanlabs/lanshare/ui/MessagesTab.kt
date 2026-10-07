@@ -72,7 +72,9 @@ internal fun MessagesTab(s: UiState, onOpen: (peer: String) -> Unit) {
     val context = LocalContext.current
     val convs = remember(s.messages) { ChatStore.conversations(s.messages) }
     val devices = s.nearby + s.added
-    val others = devices.filter { d -> convs.none { it.peer == d.id } }
+    val active = s.active
+    val others = active.filter { d -> convs.none { it.peer == d.id } }
+    var deleteFor by remember { mutableStateOf<Conversation?>(null) }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -87,14 +89,25 @@ internal fun MessagesTab(s: UiState, onOpen: (peer: String) -> Unit) {
                 }
             }
         }
+        if (convs.isNotEmpty()) item { Muted("Press and hold a conversation to delete it.") }
         items(convs, key = { "chat:" + it.peer }) { c ->
-            val live = devices.any { it.id == c.peer }
-            ConversationRow(c, live, deviceModel = devices.firstOrNull { it.id == c.peer }?.model ?: "", context) { onOpen(c.peer) }
+            val live = active.any { it.id == c.peer }
+            ConversationRow(c, live, deviceModel = devices.firstOrNull { it.id == c.peer }?.model ?: "", context,
+                onLongClick = { deleteFor = c }) { onOpen(c.peer) }
         }
         if (others.isNotEmpty()) {
             item { SectionHeader(if (convs.isEmpty()) "Write to" else "Nearby, no messages yet") }
             items(others, key = { "dev:" + it.id }) { d -> NearbyRow(d) { onOpen(d.id) } }
         }
+    }
+    deleteFor?.let { c ->
+        AlertDialog(
+            onDismissRequest = { deleteFor = null },
+            title = { Text("Delete this conversation?") },
+            text = { Text("The conversation with ${c.name.ifEmpty { "this device" }} is removed from this phone. The other device keeps its copy, and its next message asks you first.") },
+            confirmButton = { Button(onClick = { deleteFor = null; Engine.forgetChat(c.peer) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { deleteFor = null }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -106,10 +119,16 @@ private fun Avatar(model: String, live: Boolean) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationRow(c: Conversation, live: Boolean, deviceModel: String, context: Context, onClick: () -> Unit) {
+private fun ConversationRow(
+    c: Conversation, live: Boolean, deviceModel: String, context: Context, onLongClick: () -> Unit, onClick: () -> Unit,
+) {
     Surface(shape = CardDefaults.shape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClickLabel = "Delete conversation", onLongClick = onLongClick).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Avatar(deviceModel, live)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -118,6 +137,7 @@ private fun ConversationRow(c: Conversation, live: Boolean, deviceModel: String,
                 val prefix = if (c.last.incoming) "" else "You: "
                 Text(prefix + c.last.text.replace('\n', ' '), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!live) Muted("Not nearby")
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
@@ -203,7 +223,7 @@ internal fun ThreadScreen(peer: String, s: UiState, onBack: () -> Unit) {
                 title = {
                     Column {
                         Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Muted(if (device != null) "Nearby" else "Not nearby right now")
+                        Muted(if (s.active.any { it.id == peer }) "Nearby" else "Not nearby right now")
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Back, contentDescription = "Back") } },

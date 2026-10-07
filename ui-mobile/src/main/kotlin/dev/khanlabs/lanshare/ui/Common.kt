@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.text.format.DateUtils
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,14 +14,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.transfer.Format
 
@@ -32,8 +37,28 @@ internal fun Muted(text: String, mono: Boolean = false, modifier: Modifier = Mod
 @Composable
 internal fun SectionHeader(title: String, actions: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        // small, spaced capitals: the heading names the group without competing with the cards under it
+        Text(title.uppercase(), style = MaterialTheme.typography.labelLarge, letterSpacing = 1.5.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         actions()
+    }
+}
+
+/**
+ * A big rounded tile with a soft slant of light: the corner at the top left is a little lighter than the one at the
+ * bottom right. With [onClick] it is a button.
+ */
+@Composable
+internal fun SoftCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    val shape = MaterialTheme.shapes.large
+    val look = Modifier.background(
+        Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.surfaceContainerLow)),
+        shape,
+    )
+    if (onClick != null) {
+        Surface(onClick = onClick, modifier = modifier, shape = shape, color = Color.Transparent) { Box(look) { content() } }
+    } else {
+        Surface(modifier = modifier, shape = shape, color = Color.Transparent) { Box(look) { content() } }
     }
 }
 

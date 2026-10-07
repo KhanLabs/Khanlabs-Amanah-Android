@@ -178,7 +178,8 @@ internal fun DevicePickerSheet(
     what: String, s: UiState, onPick: (Device) -> Unit, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val devices = s.nearby + s.added
+    val devices = s.active
+    val inactive = if (s.showInactive) s.inactive else emptyList()
     Sheet(onDismiss) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Send $what to", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -195,6 +196,7 @@ internal fun DevicePickerSheet(
             }
         }
         for (d in devices) ActionRow(deviceIcon(d.model), d.name, d.kind()) { onPick(d) }
+        for (d in inactive) ActionRow(deviceIcon(d.model), d.name, "Not nearby  ·  ${d.kind()}") { onPick(d) }
     }
 }
 

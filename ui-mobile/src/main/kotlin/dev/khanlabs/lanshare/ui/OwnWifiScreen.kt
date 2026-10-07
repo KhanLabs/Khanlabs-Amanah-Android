@@ -298,7 +298,7 @@ private fun JoinDialog(onResult: (String) -> Unit, onDismiss: () -> Unit) {
 /** "Wi-Fi network" on the Send tab; says what is on while a network is made or joined. */
 @Composable
 internal fun OwnWifiCard(o: OwnWifiView, onClick: () -> Unit) {
-    Card(onClick = onClick, Modifier.fillMaxWidth()) {
+    SoftCard(Modifier.fillMaxWidth(), onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Glyph(Icons.Wifi, MaterialTheme.colorScheme.primary, 28)
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {

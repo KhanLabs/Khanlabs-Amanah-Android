@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -36,7 +38,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,15 +50,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.net.SendItem
@@ -81,7 +89,7 @@ data class Shared(val uris: List<Uri> = emptyList(), val text: String = "", val 
     val isEmpty: Boolean get() = uris.isEmpty() && text.isEmpty()
 }
 
-private enum class Tab(val label: String, val icon: ImageVector) {
+internal enum class Tab(val label: String, val icon: ImageVector) {
     Send("Send", Icons.Send), Messages("Messages", Icons.Chat), Activity("Activity", Icons.Activity),
     Settings("Settings", Icons.Settings)
 }
@@ -111,7 +119,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var tab by rememberSaveable { mutableStateOf(Tab.Send) }
+    // the Settings choice decides the tab at a fresh start; a recreated screen (turning the phone) keeps the tab it was on
+    var tab by rememberSaveable { mutableStateOf(Tab.entries.firstOrNull { it.name == s.startTab } ?: Tab.Send) }
     var aboutOpen by rememberSaveable { mutableStateOf(false) }
     var shareOpen by rememberSaveable { mutableStateOf(false) }  // the Share to anyone screen
     var wifiOpen by rememberSaveable { mutableStateOf(false) }   // the Wi-Fi network screen
@@ -128,6 +137,8 @@ fun HomeScreen(
     var renameOpen by remember { mutableStateOf(false) }
     var clearOpen by remember { mutableStateOf(false) }
     var detailsFor by remember { mutableStateOf<Device?>(null) }
+    var removeFor by remember { mutableStateOf<Device?>(null) }   // asking whether to remove this saved device
+    var removeAllOpen by remember { mutableStateOf(false) }        // asking whether to remove every saved device that is not nearby
     var chooseFor by remember { mutableStateOf<Device?>(null) }   // a device was tapped: what to send it?
     var chatPeer by rememberSaveable { mutableStateOf<String?>(null) }   // the conversation on screen, if any
     var dest by remember { mutableStateOf<Device?>(null) }        // the device a running pick will go to, if known
@@ -176,6 +187,12 @@ fun HomeScreen(
                 if (d != null) chatPeer = d.id else tab = Tab.Messages
             }
         }
+    }
+
+    // coming back to the app: ask the saved devices again, so a device that went away leaves the nearby list
+    LifecycleResumeEffect(Unit) {
+        Engine.checkSaved(minGapMs = 10_000)
+        onPauseOrDispose {}
     }
 
     // something shared from another app: go to the device list at once
@@ -284,20 +301,31 @@ fun HomeScreen(
         BackHandler(enabled = tab != Tab.Send) { tab = Tab.Send }
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text("Amanah", fontFamily = FontFamily.Serif, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                CenterAlignedTopAppBar(
+                    // the name in spaced capitals, in the middle; the status chip sits at the right
+                    title = { Text("AMANAH", fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Clip) },
                     actions = { ReceivingChip(s) { receivingOpen = true }; Spacer(Modifier.width(12.dp)) },
                 )
             },
             bottomBar = {
-                Column {
+                // a rounded sheet under the tabs: its top corners are round, and the tab that is open gets the accent color
+                Column(Modifier.clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)) {
                     // the labels stop growing at 130%: the bar is a fixed height, and the words are short
                     val d = LocalDensity.current
                     CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
-                        NavigationBar(Modifier.height(64.dp), windowInsets = WindowInsets(0, 0, 0, 0)) {
+                        NavigationBar(Modifier.height(64.dp), containerColor = Color.Transparent, windowInsets = WindowInsets(0, 0, 0, 0)) {
                             val unread = s.messages.count { !it.read }
                             for (t in Tab.entries) NavigationBarItem(
                                 selected = tab == t, onClick = { tab = t }, alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = Color.Transparent,
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
                                 icon = {
                                     if (t == Tab.Messages && unread > 0) {
                                         BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else unread.toString()) } }) {
@@ -311,7 +339,7 @@ fun HomeScreen(
                             )
                         }
                     }
-                    MadeWithBar()
+                    MadeWithBar(background = Color.Transparent, divider = false)
                 }
             },
         ) { pad ->
@@ -327,6 +355,8 @@ fun HomeScreen(
                         onHelp = { helpOpen = true },
                         onShareAnyone = { shareOpen = true },
                         onOwnWifi = { wifiOpen = true },
+                        onRemove = { removeFor = it },
+                        onRemoveAll = { removeAllOpen = true },
                     )
                     Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
                     Tab.Activity -> ActivityTab(s.history)
@@ -406,6 +436,16 @@ fun HomeScreen(
             confirmButton = { Button(onClick = { connectMsg = null }) { Text("OK") } })
     }
     if (renameOpen) RenameDialog(s.name, onDone = { renameOpen = false })
+    removeFor?.let { d ->
+        ConfirmDialog(
+            "Remove ${d.name}?", "It is taken off this list. Add it again with its QR code or its address. Messages with it are kept.",
+            "Remove", onConfirm = { Engine.forget(d) }, onDone = { removeFor = null },
+        )
+    }
+    if (removeAllOpen) ConfirmDialog(
+        "Remove all not nearby?", "Every saved device in the Not nearby list is taken off. Add one again with its QR code or its address. Messages are kept.",
+        "Remove all", onConfirm = { Engine.forgetInactive() }, onDone = { removeAllOpen = false },
+    )
     if (clearOpen) ConfirmDialog(
         "Clear activity?", "This removes the list of what you sent and received. The files themselves stay where they are.",
         "Clear", onConfirm = { Engine.clearHistory() }, onDone = { clearOpen = false },

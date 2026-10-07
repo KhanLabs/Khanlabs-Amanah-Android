@@ -110,10 +110,10 @@ private fun SupportCard(context: Context) {
 
 /** "Made with (heart) by Khan", pinned to the bottom of every screen. */
 @Composable
-fun MadeWithBar() {
+fun MadeWithBar(background: Color = MaterialTheme.colorScheme.surface, divider: Boolean = true) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Column(Modifier.fillMaxWidth().background(background)) {
+        if (divider) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,

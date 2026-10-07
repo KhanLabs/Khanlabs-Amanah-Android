@@ -168,11 +168,23 @@ data class UiState(
     val ownWifi: OwnWifiView = OwnWifiView(),
     /** The Settings switch: also connect to the addresses VPNs hand out (100.64.0.0/10). */
     val allowVpn: Boolean = false,
+    /** The Settings choice of which tab the app shows when it opens: a tab's name, "Send" by default. */
+    val startTab: String = "Send",
+    /** IDs of the saved devices ([added]) that answered the last check, so they count as nearby. */
+    val reachable: Set<String> = emptySet(),
+    /** The Settings switch: list saved devices that are not nearby, under their own heading, so they can be removed. */
+    val showInactive: Boolean = true,
     /** Debug builds only: text size multiplier for large-font testing; 1 in release builds. */
     val debugFontScale: Float = 1f,
     /** Debug builds only: lay the screens out as on a 320 dp wide phone. */
     val debugSmallScreen: Boolean = false,
-)
+) {
+    /** Devices to send to now: found on the network, or saved and answering. */
+    val active: List<Device> get() = nearby + added.filter { it.id in reachable }
+
+    /** Saved devices that did not answer. Only [showInactive] decides whether the screens list them. */
+    val inactive: List<Device> get() = added.filter { it.id !in reachable }
+}
 
 /**
  * The app's one transfer engine: the receiver, discovery and send jobs. Screens read [state] and call the
@@ -241,6 +253,7 @@ object Engine : ReceiverEvents {
         watchNetwork()
         addresses = Discovery.lanAddresses()
         refresh()
+        checkSaved()
     }
 
     // --- settings
@@ -253,6 +266,14 @@ object Engine : ReceiverEvents {
 
     fun setAllowVpn(on: Boolean) {
         prefs.edit().putBoolean("allow_vpn", on).apply()
+        refresh()
+    }
+
+    /** The tab the app shows when it opens, as the tab's name. The screen falls back to Send for a name it does not know. */
+    val startTab: String get() = prefs.getString("start_tab", null) ?: "Send"
+
+    fun setStartTab(tab: String) {
+        prefs.edit().putString("start_tab", tab).apply()
         refresh()
     }
 
@@ -340,8 +361,59 @@ object Engine : ReceiverEvents {
         discovery?.announce(Announcement(identity.id, name, rx.port, appLabel))
     }
 
+    /** The Refresh button: looks for devices again, and asks each saved device whether it answers. */
     fun refreshNearby() {
         main.post { discovery?.refresh() }
+        checkSaved()
+    }
+
+    /** IDs of saved devices that answered the last check. A device added just now answered when it was added. */
+    @Volatile private var reachable: Set<String> = emptySet()
+    private var checking = false
+    private var lastChecked = System.nanoTime() - 3_600_000_000_000L
+
+    /**
+     * Asks every saved device (added by address, QR code or search) whether it answers, and keeps the answer in
+     * [UiState.reachable]. Runs in the background, a device at a time in parallel, and does nothing while a check runs.
+     */
+    fun checkSaved(minGapMs: Long = 0) {
+        val list = synchronized(lock) {
+            if (checking || System.nanoTime() - lastChecked < minGapMs * 1_000_000) return
+            checking = true
+            added.toList()
+        }
+        io.execute {
+            try {
+                val answered = list.map { d -> d.id to io.submit<Boolean> { answers(d) } }
+                    .filter { (_, f) -> try { f.get() } catch (e: Exception) { false } }
+                    .map { it.first }.toSet()
+                // a device added while this ran was not asked, and keeps the answer it gave when it was added
+                reachable = (reachable - list.map { it.id }.toSet()) + answered
+            } finally {
+                synchronized(lock) { checking = false; lastChecked = System.nanoTime() }
+                refresh()
+            }
+        }
+    }
+
+    private fun noteReachable(ids: Collection<String>) {
+        reachable = reachable + ids
+    }
+
+    /** Whether the lists show saved devices that are not nearby. On unless the person turned it off. */
+    val showInactive: Boolean get() = prefs.getBoolean("show_inactive", true)
+
+    fun setShowInactive(on: Boolean) {
+        prefs.edit().putBoolean("show_inactive", on).apply()
+        refresh()
+    }
+
+    /** Forgets every saved device that did not answer the last check. Devices found on the network are not touched. */
+    fun forgetInactive() {
+        val gone = state.value.inactive.map { it.id }.toSet()
+        synchronized(lock) { added.removeAll { it.id in gone } }
+        saveAdded()
+        refresh()
     }
 
     /**
@@ -648,6 +720,7 @@ object Engine : ReceiverEvents {
                         added.add(d)
                     }
                     saveAdded()
+                    noteReachable(listOf(d.id))
                     error = null
                     break
                 } catch (e: Exception) {
@@ -695,6 +768,7 @@ object Engine : ReceiverEvents {
                     }
                 }
                 saveAdded()
+                noteReachable(found.map { it.id })
                 refresh()
             }
             main.post { onDone(found, null) }
@@ -724,6 +798,7 @@ object Engine : ReceiverEvents {
                         added.add(found)
                     }
                     saveAdded()
+                    noteReachable(listOf(found.id))
                     device = found
                     error = null
                     break
@@ -961,6 +1036,7 @@ object Engine : ReceiverEvents {
     private fun networkChanged() {
         addresses = Discovery.lanAddresses()
         refresh()
+        checkSaved(minGapMs = 10_000)
     }
 
     /** Rebuilds the screen state from the live objects. Called from any thread. */
@@ -991,6 +1067,9 @@ object Engine : ReceiverEvents {
                 share = shareView(),
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 allowVpn = allowVpn,
+                startTab = startTab,
+                reachable = reachable,
+                showInactive = showInactive,
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,
                 debugSmallScreen = debugBuild && prefs.getBoolean("debug_small_screen", false),
             )

@@ -441,9 +441,9 @@ private fun shareLink(context: Context, url: String) {
 /** "Share to anyone" on the Send tab; says "Sharing now" and the counts while a share is on. */
 @Composable
 internal fun ShareAnyoneCard(v: ShareView?, onClick: () -> Unit) {
-    Card(onClick = onClick, Modifier.fillMaxWidth()) {
+    SoftCard(Modifier.fillMaxWidth(), onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(Icons.Share, MaterialTheme.colorScheme.primary, 28)
+            Glyph(Icons.Share, Accent.Violet.color(), 28)
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 if (v == null) {
                     Text("Share to anyone", style = MaterialTheme.typography.titleMedium)

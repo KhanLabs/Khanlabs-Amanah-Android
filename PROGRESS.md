@@ -185,6 +185,28 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-07 (softer, rounder look, Android)
+- The owner sent a screenshot of another app (dark rounded tiles, spaced-out title, colored icons, rounded bottom bar) and asked for that look. Decided: Android only, look only (no layout or behavior change); Windows keeps its own look (Tk cannot draw rounded gradient cards without a rewrite).
+- `Theme.kt`: round shapes everywhere (cards 24 dp, big tiles 28 dp, sheets and dialogs 32 dp), a slightly lighter card color so the edges show, and `Accent` (icon colors, a light and a dark version each).
+- `Common.kt`: `SoftCard` (a big rounded tile with a slant of light, top left a little lighter; clickable when given `onClick`). Section headings are small spaced capitals.
+- Send tab: the four tiles are `SoftCard`s with a colored icon, the name and a short line under it (Files blue, Photos green, Folder amber, Message pink). The Share to anyone and Wi-Fi network cards are `SoftCard`s too.
+- `HomeScreen.kt`: the title is "AMANAH" in spaced capitals, centered; the bottom bar is a rounded sheet, with no pill behind the open tab, which gets the accent color.
+- `MadeWithBar` takes a `background` and `divider`, so it sits inside the rounded bottom bar without a seam.
+- `:app:assembleDebug` passes. Not seen on a phone yet: check the 320 dp and 200% text cases (title next to the chip, tile text wrapping) from the debug switches in Settings.
+
+### 2026-10-07 (nearby and not nearby devices, remove devices and chats, Android)
+- Send tab: "Nearby" lists devices found on the network plus saved devices (added by address, QR code or search) that answered. A new "Not nearby" list holds saved devices that did not answer: dimmed, with a trash button to remove one and "Remove all" for the lot. The device picker sheet shows the same two groups.
+- `Engine.checkSaved()` asks every saved device in parallel (3 s per address) and keeps the answers in `UiState.reachable`. It runs at start, on a network change, when the app comes back to the front (at most every 10 s), and on the Refresh buttons. A device just added counts as answering.
+- Settings: "Show devices that are not nearby" (on by default, `show_inactive`). Off: the Send tab and the picker list only devices found right now; saved devices stay saved and come back when they answer.
+- Messages: press and hold a conversation to delete it (confirm first); a hint line says so. A conversation whose device is away says "Not nearby". The "no messages yet" list now shows only devices that answer. Conversations are never hidden by the switch: they are history, and only the person deletes them.
+- `forget` and `forgetInactive` remove saved devices only; devices found on the network cannot be removed (they are there).
+- `:app:assembleDebug` passes. Not tried on a phone (none connected). Not changed: the Windows app has the same kind of list (hollow dot = not nearby) and a Delete conversation button, but no way to remove a device.
+
+### 2026-10-07 (tab shown when the app opens, Android)
+- Settings has a new card, "Tab shown when you open Amanah", with one chip per tab (Send, Messages, Activity, Settings). Send is the default.
+- `Engine.startTab` and `setStartTab` keep the tab's name in the `start_tab` preference; `UiState.startTab` carries it. `HomeScreen.kt` reads it for the first tab shown (`Tab` is now `internal` so the Settings screen lists the same tabs). A screen the system recreates, such as after turning the phone, keeps the tab it was on. A share from another app, the app icon's menu and a message notification still go where they went before.
+- `:app:assembleDebug` passes. Not tried on a phone yet (none was connected). To try: Settings, pick Messages, close the app from Recents, open it again.
+
 ### 2026-10-07 (retry, skip files already here, Verified: Android)
 - Protocol (optional fields only, v1 unchanged): `mtime` on files, `skip_ok` on the offer, a `skip` map in the answer, `sha256` in the upload reply, `state` and `name` in the 409 error. Text is in `docs/PROTOCOL.md` (section 3.2 and 3.3).
 - Sender (`Sender.kt`): a broken connection is tried again inside the same offer, after 2, 4, 8, 15 and 30 seconds, for up to 3 minutes. A try that got 1 MB further than any earlier one starts the 3 minutes again. "Try now" skips the wait. A refusal, a file that can't be read, a different certificate and Cancel are final. The receiver's SHA-256 is compared with the sender's own; a mismatch says the file arrived damaged.

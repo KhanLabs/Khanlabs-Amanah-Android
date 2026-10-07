@@ -34,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,8 +62,11 @@ internal fun SendTab(
     onHelp: () -> Unit,
     onShareAnyone: () -> Unit,
     onOwnWifi: () -> Unit,
+    onRemove: (Device) -> Unit,
+    onRemoveAll: () -> Unit,
 ) {
-    val devices = s.nearby + s.added
+    val devices = s.active
+    val inactive = if (s.showInactive) s.inactive else emptyList()
     val live = s.incoming.filter { it.state != "waiting" }
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -78,12 +82,12 @@ internal fun SendTab(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KindButton(Icons.File, "Files", Modifier.weight(1f)) { onKind(Kind.Files) }
-                    KindButton(Icons.Image, "Photos and videos", Modifier.weight(1f)) { onKind(Kind.Media) }
+                    KindButton(Icons.File, Accent.Blue, "Files", "Documents and more", Modifier.weight(1f)) { onKind(Kind.Files) }
+                    KindButton(Icons.Image, Accent.Green, "Photos and videos", "From your gallery", Modifier.weight(1f)) { onKind(Kind.Media) }
                 }
                 Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KindButton(Icons.Folder, "Folder", Modifier.weight(1f)) { onKind(Kind.Folder) }
-                    KindButton(Icons.Chat, "Message", Modifier.weight(1f)) { onKind(Kind.Text) }
+                    KindButton(Icons.Folder, Accent.Amber, "Folder", "A whole folder", Modifier.weight(1f)) { onKind(Kind.Folder) }
+                    KindButton(Icons.Chat, Accent.Pink, "Message", "A text to a device", Modifier.weight(1f)) { onKind(Kind.Text) }
                 }
             }
         }
@@ -96,17 +100,35 @@ internal fun SendTab(
         }
         if (devices.isEmpty()) item { NoDevices(s, onScan, onAddByIp, onHelp) }
         items(devices, key = { "dev:" + it.id }) { d -> DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }) }
+        if (inactive.isNotEmpty()) {
+            item {
+                SectionHeader("Not nearby") {
+                    TextButton(onClick = onRemoveAll) { Text("Remove all") }
+                }
+            }
+            item { Muted("Saved devices that did not answer. They show again when they are back on the network.") }
+            items(inactive, key = { "off:" + it.id }) { d ->
+                DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }, active = false, onRemove = { onRemove(d) })
+            }
+        }
         if (devices.isNotEmpty()) item { FindActions(onScan, onAddByIp, onHelp) }
     }
 }
 
 @Composable
-private fun KindButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier.heightIn(min = 88.dp)) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Glyph(icon, MaterialTheme.colorScheme.primary, 28)
-            Spacer(Modifier.height(6.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+private fun KindButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Accent, label: String, hint: String,
+    modifier: Modifier, onClick: () -> Unit,
+) {
+    SoftCard(modifier.heightIn(min = 104.dp), onClick) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Glyph(icon, accent.color(), 24)
+                Spacer(Modifier.width(10.dp))
+                Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(10.dp))
+            Muted(hint)
         }
     }
 }
@@ -142,7 +164,9 @@ private fun FindActions(onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () ->
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DeviceRow(d: Device, onClick: () -> Unit, onDetails: () -> Unit) {
+private fun DeviceRow(
+    d: Device, onClick: () -> Unit, onDetails: () -> Unit, active: Boolean = true, onRemove: (() -> Unit)? = null,
+) {
     Surface(shape = CardDefaults.shape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(
             Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onDetails).padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
@@ -150,14 +174,16 @@ private fun DeviceRow(d: Device, onClick: () -> Unit, onDetails: () -> Unit) {
         ) {
             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.size(40.dp)) {}
-                Glyph(deviceIcon(d.model), MaterialTheme.colorScheme.primary)
+                Glyph(deviceIcon(d.model), if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text(d.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Muted(d.kind())
+                Text(d.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (active) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
+                Muted(if (active) d.kind() else "Not nearby  ·  ${d.kind()}")
             }
-            IconButton(onClick = onDetails) { Glyph(Icons.Info, description = "Details") }
+            if (onRemove != null) IconButton(onClick = onRemove) { Glyph(Icons.Delete, description = "Remove ${d.name}") }
+            else IconButton(onClick = onDetails) { Glyph(Icons.Info, description = "Details") }
         }
     }
 }
