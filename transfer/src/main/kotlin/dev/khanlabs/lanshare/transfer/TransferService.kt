@@ -23,7 +23,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps the receiver running while the app is in the background, with a "Ready to receive" notification.
- * It runs while receiving is on, a share to anyone is live, or a Wi-Fi network is made or joined; when all end it stops.
+ * It runs while receiving is on, a share to anyone is live, a Wi-Fi network is made or joined, or a send or an accepted
+ * receive is under way (see [ServiceNeed]); when all end it stops.
  */
 class TransferService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -41,7 +42,19 @@ class TransferService : Service() {
             Engine.state.map { s ->
                 val share = s.share
                 val own = s.ownWifi
+                val sending = s.outgoing.filter { ServiceNeed.running(it.state) }
+                val coming = s.incoming.filter { ServiceNeed.accepted(it.state) }
                 val busy = listOfNotNull(
+                    when (sending.size) {
+                        0 -> null
+                        1 -> "Sending to ${sending[0].deviceName}"
+                        else -> "Sending to ${sending.size} devices"
+                    },
+                    when (coming.size) {
+                        0 -> null
+                        1 -> "Receiving from ${coming[0].senderName}"
+                        else -> "Receiving from ${coming.size} devices"
+                    },
                     if (share != null && share.live) "Sharing ${share.items} ${if (share.items == 1) "item" else "items"}" else null,
                     when (own.mode) {
                         OwnWifiView.Mode.Hosting -> "Wi-Fi network \"${own.ssid}\" is on"

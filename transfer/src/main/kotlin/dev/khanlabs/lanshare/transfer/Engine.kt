@@ -402,8 +402,14 @@ object Engine : ReceiverEvents {
     /** True while a share to anyone is handing files out. */
     val sharing: Boolean get() = synchronized(lock) { share }?.live() == true
 
-    /** The foreground service must run: receiving is on, a share is live, or a Wi-Fi network is made or joined. */
-    val needsService: Boolean get() = receiving || sharing || (::own.isInitialized && own.view.active)
+    /**
+     * The foreground service must run: receiving is on, a share is live, a Wi-Fi network is made or joined, or a send or
+     * an accepted receive is under way (see [ServiceNeed]).
+     */
+    val needsService: Boolean get() =
+        ServiceNeed.needed(receiving, sharing, ::own.isInitialized && own.view.active, transferring(_state.value))
+
+    private fun transferring(s: UiState) = ServiceNeed.transferring(s.outgoing.map { it.state }, s.incoming.map { it.state })
 
     /** Debug builds only: scales text so large-font layouts can be tested on phones that won't change the system size. */
     fun setDebugFontScale(scale: Float) {
@@ -739,6 +745,7 @@ object Engine : ReceiverEvents {
         val job = SendJob(clients, me(), device, items, text) { refresh() }
         synchronized(lock) { jobs[key] = job }
         refresh()
+        keepAliveForSend()
         io.execute {
             val begun = System.currentTimeMillis()
             job.run()
@@ -746,6 +753,19 @@ object Engine : ReceiverEvents {
             if (job.state == SendJob.State.DONE || job.state == SendJob.State.DECLINED) job.releaseItems()
             record(job, begun)
             refresh()
+        }
+    }
+
+    /**
+     * Starts the foreground service for a send, so Android keeps the process when the app goes to the background.
+     * A send begins from the screen, which is in front, so Android allows it; if it does not, the send goes on while
+     * the app stays open.
+     */
+    private fun keepAliveForSend() = main.post {
+        try {
+            TransferService.start(app)
+        } catch (e: Exception) {
+            errors.add("couldn't start the service for a send: ${e.message}")
         }
     }
 
@@ -1240,7 +1260,7 @@ object Engine : ReceiverEvents {
         }
         _state.value = snapshot
         holdLocks(snapshot)
-        val need = receiving || snapshot.share?.live == true || snapshot.ownWifi.active
+        val need = ServiceNeed.needed(receiving, snapshot.share?.live == true, snapshot.ownWifi.active, transferring(snapshot))
         if (serviceWanted && !need) main.post { TransferService.stop(app) } // nothing left for the service to do
         serviceWanted = need
     }
