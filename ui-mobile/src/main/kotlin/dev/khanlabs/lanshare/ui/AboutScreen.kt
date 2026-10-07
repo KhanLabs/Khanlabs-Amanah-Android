@@ -30,11 +30,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.transfer.Engine
@@ -119,9 +122,13 @@ fun MadeWithBar(background: Color = MaterialTheme.colorScheme.surface, divider: 
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Made with ", style = MaterialTheme.typography.bodySmall, color = muted)
-            Icon(Icons.Heart, contentDescription = "love", tint = HeartRed, modifier = Modifier.size(14.dp))
-            Text(" by $AUTHOR", style = MaterialTheme.typography.bodySmall, color = muted)
+            // a small credit line: it stops growing at 130% so it never takes a fifth of a large-text screen
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
+                Text("Made with ", style = MaterialTheme.typography.bodySmall, color = muted)
+                Icon(Icons.Heart, contentDescription = "love", tint = HeartRed, modifier = Modifier.size(14.dp))
+                Text(" by $AUTHOR", style = MaterialTheme.typography.bodySmall, color = muted)
+            }
         }
     }
 }

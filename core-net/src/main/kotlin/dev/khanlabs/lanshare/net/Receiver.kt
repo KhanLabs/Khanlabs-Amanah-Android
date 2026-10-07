@@ -59,6 +59,8 @@ class Offer(
     internal val answered = CountDownLatch(1)
     internal var store: ReceiveStore? = null
     val created: Long = System.currentTimeMillis()
+    /** When this phone said yes, in milliseconds since 1970. 0 until then. */
+    @Volatile var acceptedAt = 0L
 
     /** What will really be sent: files left out as "already here" don't count. */
     val total: Long get() = files.sumOf { if (it.skipped) 0L else it.size }
@@ -151,6 +153,7 @@ class Receiver(
                     }
                 }
                 offer.state = "accepted"
+                offer.acceptedAt = System.currentTimeMillis()
                 offer.lastSeen = System.nanoTime()
             } else {
                 offer.state = "declined"

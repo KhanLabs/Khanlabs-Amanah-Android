@@ -24,4 +24,7 @@ dependencies {
     api(project(":core-link"))
     api(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
+
+    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.junit)
 }

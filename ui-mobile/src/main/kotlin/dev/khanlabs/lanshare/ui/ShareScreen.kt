@@ -443,7 +443,7 @@ private fun shareLink(context: Context, url: String) {
 internal fun ShareAnyoneCard(v: ShareView?, onClick: () -> Unit) {
     SoftCard(Modifier.fillMaxWidth(), onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(Icons.Share, Accent.Violet.color(), 28)
+            Glyph(Icons.Share, MaterialTheme.colorScheme.onSurfaceVariant, 28)
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 if (v == null) {
                     Text("Share to anyone", style = MaterialTheme.typography.titleMedium)

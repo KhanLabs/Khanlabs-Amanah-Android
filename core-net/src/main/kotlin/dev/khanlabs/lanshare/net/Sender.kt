@@ -134,6 +134,15 @@ class SendJob(
     /** The connection broke and the send is waiting to try again (state stays SENDING). */
     @Volatile var reconnecting = false
         private set
+    /** When the receiver said yes, in milliseconds since 1970. 0 until then. */
+    @Volatile var acceptedAt = 0L
+        private set
+    /** How many times the connection broke and the send tried again. */
+    @Volatile var resumes = 0
+        private set
+    /** The fastest speed seen over a few seconds, in bytes per second. */
+    @Volatile var peakSpeed = 0.0
+        private set
     /** The address that answered. */
     @Volatile var host: String = device.hosts.firstOrNull() ?: ""
         private set
@@ -149,6 +158,13 @@ class SendJob(
     private val retrySignal = Semaphore(0)
 
     val speed: Double get() = rate.speed()
+
+    /** Feeds the speed meter after bytes went out, and keeps the best speed seen. */
+    private fun noteSent() {
+        rate.add(sent)
+        val now = rate.speed()
+        if (now > peakSpeed) peakSpeed = now
+    }
     val etaSeconds: Long? get() = rate.eta(sent, total)
 
     /** How many files are really being sent. */
@@ -252,6 +268,7 @@ class SendJob(
             throw SendException("${device.name} answered in a way Amanah doesn't understand. Check that both devices run the latest Amanah.")
         }
         val tokens = accepted.files
+        acceptedAt = System.currentTimeMillis()
         val already = accepted.skip.orEmpty()
         files.forEachIndexed { i, f ->
             if (f.id in already) {
@@ -358,7 +375,7 @@ class SendJob(
                 when (err.state) {
                     "done" -> {
                         sent = before + item.size
-                        rate.add(sent)
+                        noteSent()
                         return err.name?.takeIf { it.isNotEmpty() } ?: f.name
                     }
                     "receiving" -> throw StillReceiving()
@@ -374,6 +391,7 @@ class SendJob(
     private fun pause(seconds: Long) {
         retrySignal.drainPermits()
         reconnecting = true
+        resumes++
         update(State.SENDING, "The connection to ${device.name} dropped. Trying again in $seconds seconds.")
         retrySignal.tryAcquire(seconds, TimeUnit.SECONDS)
     }
@@ -415,7 +433,7 @@ class SendJob(
                         val now = System.nanoTime()
                         if (now - last > 200_000_000L) {
                             last = now
-                            rate.add(sent)
+                            noteSent()
                             update()
                         }
                     }
@@ -432,7 +450,7 @@ class SendJob(
                         // an earlier try got there after all: the file counts as sent (nothing to check it against)
                         "done" -> {
                             sent = before + item.size
-                            rate.add(sent)
+                            noteSent()
                             return err.name?.takeIf { it.isNotEmpty() } ?: f.name
                         }
                         "receiving" -> throw StillReceiving()

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -32,10 +33,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,8 +56,9 @@ import dev.khanlabs.lanshare.transfer.OutgoingView
 import dev.khanlabs.lanshare.transfer.UiState
 
 /**
- * The first tab: what's moving now, four ways to pick something to send, and the devices nearby. Sending starts
- * from either end: pick content then a device, or tap a device then pick content.
+ * The first tab: whether this phone is receiving, what's moving now, four ways to pick something to send, the devices
+ * nearby, then the other ways to reach someone. Sending starts from either end: pick content then a device, or tap a
+ * device then pick content.
  */
 @Composable
 internal fun SendTab(
@@ -64,85 +73,118 @@ internal fun SendTab(
     onOwnWifi: () -> Unit,
     onRemove: (Device) -> Unit,
     onRemoveAll: () -> Unit,
+    onReceivingChange: (Boolean) -> Unit,
+    onOpenReceiving: () -> Unit,
 ) {
     val devices = s.active
     val inactive = if (s.showInactive) s.inactive else emptyList()
     val live = s.incoming.filter { it.state != "waiting" }
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (live.isNotEmpty() || s.outgoing.isNotEmpty()) {
-            item { SectionHeader("Now") }
-            items(live, key = { "in:" + it.id }) { IncomingCard(it) }
-            items(s.outgoing, key = { "out:" + it.key }) { OutgoingCard(it) }
-        }
+    val compact = compactScreen()
+    // with very large text the devices come before the tiles, so they stay within reach
+    val devicesFirst = LocalDensity.current.fontScale >= 1.6f
+    var savedOpen by rememberSaveable { mutableStateOf(false) }
+
+    fun LazyListScope.tiles() {
         item { SectionHeader("Send") }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (devicesFirst) {
+                // very large text: one tile to a line, so no name is cut in the middle of a word
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KindButton(Icons.File, Accent.Blue, "Files", "Documents and more", true, Modifier.fillMaxWidth()) { onKind(Kind.Files) }
+                    KindButton(Icons.Image, Accent.Violet, "Photos and videos", "From your gallery", true, Modifier.fillMaxWidth(), full = true) { onKind(Kind.Media) }
+                    KindButton(Icons.Folder, Accent.Amber, "Folder", "A whole folder", true, Modifier.fillMaxWidth()) { onKind(Kind.Folder) }
+                    KindButton(Icons.Chat, Accent.Pink, "Message", "A text to a device", true, Modifier.fillMaxWidth()) { onKind(Kind.Text) }
+                }
+            } else Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KindButton(Icons.File, Accent.Blue, "Files", "Documents and more", Modifier.weight(1f)) { onKind(Kind.Files) }
-                    KindButton(Icons.Image, Accent.Green, "Photos and videos", "From your gallery", Modifier.weight(1f)) { onKind(Kind.Media) }
+                    KindButton(Icons.File, Accent.Blue, "Files", "Documents and more", compact, Modifier.weight(1f)) { onKind(Kind.Files) }
+                    KindButton(Icons.Image, Accent.Violet, "Photos and videos", "From your gallery", compact, Modifier.weight(1f)) { onKind(Kind.Media) }
                 }
                 Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KindButton(Icons.Folder, Accent.Amber, "Folder", "A whole folder", Modifier.weight(1f)) { onKind(Kind.Folder) }
-                    KindButton(Icons.Chat, Accent.Pink, "Message", "A text to a device", Modifier.weight(1f)) { onKind(Kind.Text) }
+                    KindButton(Icons.Folder, Accent.Amber, "Folder", "A whole folder", compact, Modifier.weight(1f)) { onKind(Kind.Folder) }
+                    KindButton(Icons.Chat, Accent.Pink, "Message", "A text to a device", compact, Modifier.weight(1f)) { onKind(Kind.Text) }
                 }
             }
         }
-        item { ShareAnyoneCard(s.share, onShareAnyone) }
-        item { OwnWifiCard(s.ownWifi, onOwnWifi) }
+    }
+
+    fun LazyListScope.nearby() {
         item {
             SectionHeader("Nearby") {
                 IconButton(onClick = { Engine.refreshNearby() }) { Glyph(Icons.Refresh, description = "Refresh") }
             }
         }
-        if (devices.isEmpty()) item { NoDevices(s, onScan, onAddByIp, onHelp) }
+        if (devices.isEmpty()) item { NoDevices(s) }
         items(devices, key = { "dev:" + it.id }) { d -> DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }) }
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { ReceivingCard(s, onReceivingChange, onOpenReceiving, onMakeLink = onOwnWifi) }
+        if (live.isNotEmpty() || s.outgoing.isNotEmpty()) {
+            item { SectionHeader("Now") }
+            items(live, key = { "in:" + it.id }) { IncomingCard(it) }
+            items(s.outgoing, key = { "out:" + it.key }) { OutgoingCard(it) }
+        }
+        if (devicesFirst) { nearby(); tiles() } else { tiles(); nearby() }
+        item { SectionHeader("More ways") }
+        item { ShareAnyoneCard(s.share, onShareAnyone) }
+        item { OwnWifiCard(s.ownWifi, onOwnWifi) }
+        item { FindActions(onScan, onAddByIp, onHelp) }
         if (inactive.isNotEmpty()) {
             item {
-                SectionHeader("Not nearby") {
-                    TextButton(onClick = onRemoveAll) { Text("Remove all") }
+                SectionHeader("Not nearby (${inactive.size})") {
+                    if (savedOpen) TextButton(onClick = onRemoveAll) { Text("Remove all") }
+                    IconButton(onClick = { savedOpen = !savedOpen }) {
+                        Glyph(if (savedOpen) Icons.ExpandLess else Icons.ExpandMore, description = if (savedOpen) "Hide" else "Show")
+                    }
                 }
             }
-            item { Muted("Saved devices that did not answer. They show again when they are back on the network.") }
-            items(inactive, key = { "off:" + it.id }) { d ->
-                DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }, active = false, onRemove = { onRemove(d) })
+            if (savedOpen) {
+                item { Muted("Saved devices that did not answer. They show again when they are back on the network.") }
+                items(inactive, key = { "off:" + it.id }) { d ->
+                    DeviceRow(d, onClick = { onDevice(d) }, onDetails = { onDetails(d) }, active = false, onRemove = { onRemove(d) })
+                }
             }
         }
-        if (devices.isNotEmpty()) item { FindActions(onScan, onAddByIp, onHelp) }
     }
 }
 
 @Composable
 private fun KindButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Accent, label: String, hint: String,
-    modifier: Modifier, onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Accent, label: String, hint: String, compact: Boolean,
+    modifier: Modifier, full: Boolean = false, onClick: () -> Unit,
 ) {
-    SoftCard(modifier.heightIn(min = 104.dp), onClick) {
+    // at large text the second line goes and the name is short, so four tiles still fit on the screen; a tile that has a
+    // whole line to itself keeps the full name
+    val shown = if (compact && !full) when (label) { "Photos and videos" -> "Photos"; else -> label } else label
+    SoftCard(modifier.heightIn(min = if (compact) 80.dp else 104.dp), onClick) {
         Column(Modifier.fillMaxWidth().fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Glyph(icon, accent.color(), 24)
                 Spacer(Modifier.width(10.dp))
-                Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(shown, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { contentDescription = label })
             }
-            Spacer(Modifier.height(10.dp))
-            Muted(hint)
+            if (!compact) {
+                Spacer(Modifier.height(10.dp))
+                Muted(hint)
+            }
         }
     }
 }
 
 @Composable
-private fun NoDevices(s: UiState, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit) {
-    Card {
+private fun NoDevices(s: UiState) {
+    Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("No devices found yet")
             Spacer(Modifier.height(4.dp))
-            Muted(if (s.receiving) "Open Amanah on the other device, on the same Wi-Fi."
-                  else "Turn on receiving to look for other devices, or use Add by IP.")
-            Spacer(Modifier.height(8.dp))
-            FindActions(onScan, onAddByIp, onHelp)
+            Muted(if (s.receiving) "Open Amanah on the other device, on the same Wi-Fi. If it does not show up, try the ways under More ways."
+                  else "Turn on receiving to look for other devices, or use Add by IP under More ways.")
         }
     }
 }

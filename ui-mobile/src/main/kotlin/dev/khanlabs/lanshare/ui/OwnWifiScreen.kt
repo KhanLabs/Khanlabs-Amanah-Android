@@ -300,7 +300,7 @@ private fun JoinDialog(onResult: (String) -> Unit, onDismiss: () -> Unit) {
 internal fun OwnWifiCard(o: OwnWifiView, onClick: () -> Unit) {
     SoftCard(Modifier.fillMaxWidth(), onClick) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(Icons.Wifi, MaterialTheme.colorScheme.primary, 28)
+            Glyph(Icons.Wifi, MaterialTheme.colorScheme.onSurfaceVariant, 28)
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 when (o.mode) {
                     OwnWifiView.Mode.Off -> {

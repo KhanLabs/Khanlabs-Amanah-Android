@@ -36,7 +36,7 @@ private enum class Filter(val label: String) { All("All"), In("Received"), Out("
 
 /** Everything this phone sent or received lately, newest first. Kept on the phone only. */
 @Composable
-internal fun ActivityTab(history: List<HistoryEntry>) {
+internal fun ActivityTab(history: List<HistoryEntry>, onStats: () -> Unit) {
     var filter by rememberSaveable { mutableStateOf(Filter.All) }
     val shown = history.filter { filter == Filter.All || (filter == Filter.In) == it.incoming }
     LazyColumn(
@@ -44,6 +44,7 @@ internal fun ActivityTab(history: List<HistoryEntry>) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (history.isNotEmpty()) item { StatsSummaryCard(history, onStats) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (f in Filter.entries) FilterChip(selected = filter == f, onClick = { filter = f }, label = { Text(f.label) })

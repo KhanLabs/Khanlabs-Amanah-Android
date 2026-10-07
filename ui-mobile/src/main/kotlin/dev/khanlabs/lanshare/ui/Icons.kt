@@ -52,6 +52,15 @@ internal object Icons {
         "M16,16h1.5v1.5H16V16zM17.5,14.5H19V16h-1.5V14.5zM17.5,17.5H19V19h-1.5V17.5zM22,7h-2V4h-3V2h5V7zM22,22v-5h-2v3h-3v2H22z" +
         "M2,22h5v-2H4v-3H2V22zM2,2v5h2V4h3V2H2z")
 
+    val WifiOff = icon("M23.64,7c-0.45,-0.34 -4.93,-4 -11.64,-4 -1.5,0 -2.89,0.19 -4.15,0.48L18.18,13.8 23.64,7zM3.41,1.31L2,2.72l2.05,2.05" +
+        "C1.91,5.76 0.59,6.82 0.36,7l11.63,14.49 0.01,0.01 0.01,-0.01 3.9,-4.86 3.32,3.32 1.41,-1.41L3.41,1.31z")
+    val Error = icon("M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM13,17h-2v-2h2v2zM13,13h-2L11,7h2v6z")
+    val Power = icon("M13,3h-2v10h2L13,3zM17.83,5.17l-1.42,1.42C17.99,7.86 19,9.81 19,12c0,3.87 -3.13,7 -7,7s-7,-3.13 -7,-7c0,-2.19 1.01,-4.14 2.58,-5.42" +
+        "L6.17,5.17C4.23,6.82 3,9.26 3,12c0,4.97 4.03,9 9,9s9,-4.03 9,-9c0,-2.74 -1.23,-5.18 -3.17,-6.83z")
+    val CheckCircle = icon("M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z")
+    val ExpandMore = icon("M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z")
+    val ExpandLess = icon("M12,8l-6,6 1.41,1.41L12,10.83l4.59,4.58L18,14z")
+
     private fun icon(path: String): ImageVector =
         ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))

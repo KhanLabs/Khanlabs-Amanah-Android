@@ -170,6 +170,10 @@ data class UiState(
     val allowVpn: Boolean = false,
     /** The Settings choice of which tab the app shows when it opens: a tab's name, "Send" by default. */
     val startTab: String = "Send",
+    /** The Settings choice of look: system, light, dark or black. */
+    val theme: String = "system",
+    /** The Settings choice of accent color: teal, blue, violet, pink or mono. */
+    val accent: String = "teal",
     /** IDs of the saved devices ([added]) that answered the last check, so they count as nearby. */
     val reachable: Set<String> = emptySet(),
     /** The Settings switch: list saved devices that are not nearby, under their own heading, so they can be removed. */
@@ -271,6 +275,22 @@ object Engine : ReceiverEvents {
 
     /** The tab the app shows when it opens, as the tab's name. The screen falls back to Send for a name it does not know. */
     val startTab: String get() = prefs.getString("start_tab", null) ?: "Send"
+
+    /** The look: system, light, dark or black. */
+    val theme: String get() = prefs.getString("theme", null) ?: "system"
+
+    fun setTheme(value: String) {
+        prefs.edit().putString("theme", value).apply()
+        refresh()
+    }
+
+    /** The accent color's key: teal, blue, violet, pink or mono. */
+    val accent: String get() = prefs.getString("accent", null) ?: "teal"
+
+    fun setAccent(value: String) {
+        prefs.edit().putString("accent", value).apply()
+        refresh()
+    }
 
     fun setStartTab(tab: String) {
         prefs.edit().putString("start_tab", tab).apply()
@@ -466,8 +486,13 @@ object Engine : ReceiverEvents {
             Notifications.received(app, v)
         }
         if (!nothingNew && (offer.state == "done" || (offer.state == "cancelled" && v.saved.isNotEmpty()))) {
+            val now = System.currentTimeMillis()
             history.add(HistoryEntry("in:${offer.id}", true, v.senderName, if (offer.state == "done") "done" else "partial",
-                v.saved.size, v.received, System.currentTimeMillis(), v.saved.take(History.MAX_NAMES), v.text))
+                v.saved.size, v.received, now, v.saved.take(History.MAX_NAMES), v.text,
+                peerId = if (DeviceId.isValid(offer.sender.id)) offer.sender.id else "",
+                kind = if (v.saved.any { '/' in it }) "folder" else "files",
+                requestedAt = offer.created, acceptedAt = offer.acceptedAt, endedAt = now,
+                filesSkipped = offer.files.count { it.skipped }, bytesSkipped = offer.files.filter { it.skipped }.sumOf { it.size }))
         }
         refresh()
     }
@@ -607,13 +632,14 @@ object Engine : ReceiverEvents {
         synchronized(lock) { jobs[key] = job }
         refresh()
         io.execute {
+            val begun = System.currentTimeMillis()
             job.run()
-            record(job)
+            record(job, begun)
             refresh()
         }
     }
 
-    private fun record(job: SendJob) {
+    private fun record(job: SendJob, begun: Long) {
         val state = when (job.state) {
             SendJob.State.DONE -> "done"
             SendJob.State.DECLINED -> "declined"
@@ -624,9 +650,16 @@ object Engine : ReceiverEvents {
         if (state == "failed") logFailure("send to ${job.device.name}", job)
         val count = job.items.size - job.skipped
         if (state == "done" && job.items.isNotEmpty() && count == 0) return // nothing new went across
+        val now = System.currentTimeMillis()
         history.add(HistoryEntry("out:${job.offerId}", false, job.device.name, state, count,
-            if (state == "done") job.total else job.sent, System.currentTimeMillis(),
-            job.items.take(History.MAX_NAMES).map { it.name }, job.text, if (state == "failed") job.message else ""))
+            if (state == "done") job.total else job.sent, now,
+            job.items.take(History.MAX_NAMES).map { it.name }, job.text, if (state == "failed") job.message else "",
+            peerId = job.device.id,
+            kind = if (job.items.isEmpty()) "text" else if (job.items.any { '/' in it.name }) "folder" else "files",
+            route = if (nearby.any { it.id == job.device.id }) "nearby" else "saved",
+            requestedAt = begun, acceptedAt = job.acceptedAt, endedAt = now,
+            filesSkipped = job.skipped, bytesSkipped = job.skippedBytes,
+            resumes = job.resumes, peakBps = job.peakSpeed.toLong(), verified = job.verified))
     }
 
     private fun logFailure(what: String, job: SendJob) {
@@ -1068,6 +1101,8 @@ object Engine : ReceiverEvents {
                 ownWifi = if (::own.isInitialized) own.view else OwnWifiView(),
                 allowVpn = allowVpn,
                 startTab = startTab,
+                theme = theme,
+                accent = accent,
                 reachable = reachable,
                 showInactive = showInactive,
                 debugFontScale = if (debugBuild) prefs.getFloat("debug_font_scale", 1f) else 1f,

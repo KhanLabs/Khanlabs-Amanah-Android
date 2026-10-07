@@ -185,6 +185,16 @@ Open questions for the owner (from `docs/PLAN.md`, section 9.1):
 
 ## Log
 
+### 2026-10-07 (design pass from the research: status card, Stats, Settings groups, Appearance, Android)
+- Research: Opus (a second model) searched other sharing apps and 2025-26 design guidance, then answered six objections. I checked three of its sources by hand (Android settings guidelines, Nielsen Norman Group on charts, 9to5google on Quick Share): they match. The owner's rules for now: one accent color, three surface levels, one corner family, one typeface, short spring motion, no glass blur, no pure black by default. If it does not look good, change it.
+- History keeps more per transfer (`HistoryEntry`, all optional, old entries stay valid): peer ID, kind, route, requested, accepted and ended times, files and bytes left out as already there, resumes, peak speed, verified count. `SendJob` gained `acceptedAt`, `resumes`, `peakSpeed`; `Offer` gained `acceptedAt`.
+- Title bar is only the centered "AMANAH". The receiving control is now `ReceivingCard.kt` at the top of the Send tab with five states (Receiving, Starting, Off, No Wi-Fi with a Make link button, Problem with a Fix button). The old chip is gone.
+- Send tab order: status card, Now, the four tiles, Nearby, More ways (Share to anyone, Wi-Fi network, Scan QR, Add by IP, Not showing up), then a collapsed "Not nearby (n)" list. With text at 160% or more, Nearby moves above the tiles. At 130% or on a narrow screen the tiles drop their second line and the status card its detail line (the cause of a problem always stays).
+- Theme: three surfaces, one corner family (12, 20, 28 dp), tile icons in one soft family (blue, violet, amber, pink), teal only for switches, buttons, the open tab and progress. New choices in Settings: Theme (System, Light, Dark, Black) and Accent color (Teal, Blue, Violet, Pink, Mono); the status and navigation bars follow the chosen theme.
+- Stats: `Stats.kt` works out totals, a bar per day (week, 30 days) or month, sent and received, best speed, top devices, file kinds and reliability from the Activity list; 10 unit tests in `transfer/src/test` pass. `StatsScreen.kt` shows it, opened from a "This week" card at the top of Activity.
+- Settings is regrouped (This device, Receiving, Appearance, Devices, Privacy and data, Advanced, About), each row with its current value under it. Advanced is folded.
+- Not done yet: auto-off for Receiving (Never, after 1 hour, when the Wi-Fi changes; default Never), a per-file list in the history, haptics and the finish animation, per-device auto-accept, Windows parity (status block, Stats in Activity, Settings groups). The phone was not connected after the status card went in, so none of this has been looked at on the phone: check it at 320 dp and 200% text first.
+
 ### 2026-10-07 (softer, rounder look, Android)
 - The owner sent a screenshot of another app (dark rounded tiles, spaced-out title, colored icons, rounded bottom bar) and asked for that look. Decided: Android only, look only (no layout or behavior change); Windows keeps its own look (Tk cannot draw rounded gradient cards without a rewrite).
 - `Theme.kt`: round shapes everywhere (cards 24 dp, big tiles 28 dp, sheets and dialogs 32 dp), a slightly lighter card color so the edges show, and `Accent` (icon colors, a light and a dark version each).

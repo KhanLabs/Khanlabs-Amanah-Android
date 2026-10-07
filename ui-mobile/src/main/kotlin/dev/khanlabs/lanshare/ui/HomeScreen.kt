@@ -122,6 +122,7 @@ fun HomeScreen(
     // the Settings choice decides the tab at a fresh start; a recreated screen (turning the phone) keeps the tab it was on
     var tab by rememberSaveable { mutableStateOf(Tab.entries.firstOrNull { it.name == s.startTab } ?: Tab.Send) }
     var aboutOpen by rememberSaveable { mutableStateOf(false) }
+    var statsOpen by rememberSaveable { mutableStateOf(false) }  // the Stats screen
     var shareOpen by rememberSaveable { mutableStateOf(false) }  // the Share to anyone screen
     var wifiOpen by rememberSaveable { mutableStateOf(false) }   // the Wi-Fi network screen
     var receivingOpen by remember { mutableStateOf(false) }
@@ -294,6 +295,9 @@ fun HomeScreen(
     } else if (wifiOpen) {
         BackHandler { wifiOpen = false }
         OwnWifiScreen(s, onBack = { wifiOpen = false }, onScan = { scanOpen = true }, onReceivingChange = onReceivingChange)
+    } else if (statsOpen) {
+        BackHandler { statsOpen = false }
+        StatsScreen(s.history, onBack = { statsOpen = false })
     } else if (aboutOpen) {
         BackHandler { aboutOpen = false }
         AboutScreen(onBack = { aboutOpen = false })
@@ -302,10 +306,15 @@ fun HomeScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    // the name in spaced capitals, in the middle; the status chip sits at the right
-                    title = { Text("AMANAH", fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Clip) },
-                    actions = { ReceivingChip(s) { receivingOpen = true }; Spacer(Modifier.width(12.dp)) },
+                    // only the name, in spaced capitals, in the middle: the receiving status lives on the Send tab
+                    title = {
+                        // the name is a mark, not reading text: it stops growing at 130% so the bar keeps its height
+                        val d = LocalDensity.current
+                        CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
+                            Text("AMANAH", fontWeight = FontWeight.Bold, fontSize = 18.sp, letterSpacing = 5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Clip)
+                        }
+                    },
                 )
             },
             bottomBar = {
@@ -357,10 +366,12 @@ fun HomeScreen(
                         onOwnWifi = { wifiOpen = true },
                         onRemove = { removeFor = it },
                         onRemoveAll = { removeAllOpen = true },
+                        onReceivingChange = onReceivingChange,
+                        onOpenReceiving = { receivingOpen = true },
                     )
                     Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
-                    Tab.Activity -> ActivityTab(s.history)
-                    Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { clearOpen = true }, { aboutOpen = true })
+                    Tab.Activity -> ActivityTab(s.history, onStats = { statsOpen = true })
+                    Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { qrOpen = true }, { clearOpen = true }, { aboutOpen = true })
                 }
             }
         }
@@ -473,28 +484,6 @@ private fun sendPending(context: Context, scope: CoroutineScope, device: Device,
         if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
         val all = fromUris + p.items
         if (all.isNotEmpty() || p.text.isNotEmpty()) Engine.send(device, all, p.text)
-    }
-}
-
-// --- the top bar's status chip
-
-@Composable
-private fun ReceivingChip(s: UiState, onClick: () -> Unit) {
-    val (label, dot) = when {
-        s.listenError != null -> "Problem" to MaterialTheme.colorScheme.error
-        !s.receiving -> "Not receiving" to MaterialTheme.colorScheme.outline
-        s.addresses.isEmpty() -> "No Wi-Fi" to MaterialTheme.colorScheme.outline
-        s.port == null -> "Starting" to MaterialTheme.colorScheme.outline
-        else -> "Receiving" to MaterialTheme.colorScheme.primary
-    }
-    // a status light, not body text: it stops growing at 130% so the title keeps its room
-    val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1.3f))) {
-        AssistChip(
-            onClick = onClick,
-            label = { Text(label, maxLines = 1) },
-            leadingIcon = { Surface(shape = CircleShape, color = dot, modifier = Modifier.size(10.dp)) {} },
-        )
     }
 }
 
