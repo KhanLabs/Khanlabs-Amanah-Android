@@ -1,5 +1,6 @@
 package dev.khanlabs.lanshare.protocol
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -52,7 +53,13 @@ data class Info(
 data class Sender(val id: String = "", val name: String = "", val model: String = "", val app: String = "")
 
 @Serializable
-data class OfferFile(val id: String, val name: String, val size: Long)
+data class OfferFile(
+    val id: String,
+    val name: String,
+    val size: Long,
+    /** When the file was last changed, in whole seconds since 1970; left out when the sender can't tell (PROTOCOL.md 3.2). */
+    val mtime: Long? = null,
+)
 
 @Serializable
 data class OfferRequest(
@@ -62,13 +69,25 @@ data class OfferRequest(
     val text: String? = null,
     /** "message" for a chat text (PROTOCOL.md 3.2); left out otherwise. */
     val kind: String? = null,
+    /** True when the sender understands the `skip` list in the answer (PROTOCOL.md 3.2); left out otherwise. */
+    @SerialName("skip_ok") val skipOk: Boolean? = null,
 )
 
 @Serializable
-data class OfferAccepted(val offer: String, val files: Map<String, String>)
+data class OfferAccepted(
+    val offer: String,
+    val files: Map<String, String>,
+    /** Files the receiver already has, by file id, with the name each is saved under (PROTOCOL.md 3.2). */
+    val skip: Map<String, String>? = null,
+)
 
 @Serializable
-data class UploadReply(val ok: Boolean, val name: String)
+data class UploadReply(
+    val ok: Boolean,
+    val name: String,
+    /** SHA-256 of the bytes the receiver wrote, 64 lowercase hex digits (PROTOCOL.md 3.3). Older receivers leave it out. */
+    val sha256: String? = null,
+)
 
 @Serializable
 data class CancelRequest(val offer: String)
@@ -77,7 +96,14 @@ data class CancelRequest(val offer: String)
 data class OkReply(val ok: Boolean = true)
 
 @Serializable
-data class ApiError(val error: String, val message: String = "")
+data class ApiError(
+    val error: String,
+    val message: String = "",
+    /** On a 409 `already`: receiving or done (PROTOCOL.md 3.3). */
+    val state: String? = null,
+    /** On a 409 `already` with state `done`: the name the file was saved under. */
+    val name: String? = null,
+)
 
 /** An error reply: HTTP status plus the fixed code from the protocol. */
 class ProtocolException(val status: Int, val code: String, message: String) : Exception(message) {
@@ -92,6 +118,8 @@ data class CheckedOffer(
     val text: String,
     /** "message" only for text without files that asked for it, else empty. */
     val kind: String = "",
+    /** The sender understands the `skip` list in the answer. */
+    val skipOk: Boolean = false,
 ) {
     val totalBytes: Long get() = files.sumOf { it.size }
 }
@@ -153,11 +181,14 @@ object OfferCheck {
                 throw ProtocolException(400, "bad_files", "\"${Names.shown(name)}\": every file needs its own id.")
             }
             seen += fid
-            files += OfferFile(fid, name, size)
+            // the modified time is a hint: a value that is not a whole number of seconds is ignored, not refused
+            val mtime = (f["mtime"] as? JsonPrimitive)?.takeIf { !it.isString && it.booleanOrNull == null }?.longOrNull?.takeIf { it > 0 }
+            files += OfferFile(fid, name, size, mtime)
         }
         if (files.isEmpty() && text.isEmpty()) throw ProtocolException(400, "empty", "Send at least one file or some text")
         val asked = (data["kind"] as? JsonPrimitive)?.takeIf { it.isString }?.content == V1.KIND_MESSAGE
-        return CheckedOffer(offerId, sender, files, text, if (asked && text.isNotEmpty() && files.isEmpty()) V1.KIND_MESSAGE else "")
+        val skipOk = (data["skip_ok"] as? JsonPrimitive)?.let { !it.isString && it.booleanOrNull == true } == true
+        return CheckedOffer(offerId, sender, files, text, if (asked && text.isNotEmpty() && files.isEmpty()) V1.KIND_MESSAGE else "", skipOk)
     }
 
     /** Python's str() of a JSON value, for the few fields the Windows app converts that way. */

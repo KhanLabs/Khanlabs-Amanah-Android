@@ -99,11 +99,12 @@ class Exchange internal constructor(
     fun <T> sendJson(status: Int, serializer: KSerializer<T>, value: T) =
         sendJson(status, ProtocolJson.encodeToString(serializer, value))
 
-    /** An error reply: {"error": code, "message": message}. */
-    fun fail(status: Int, code: String, message: String) {
-        drain()
+    /** An error reply: {"error": code, "message": message}, plus `state` and `name` where PROTOCOL.md 3.3 has them. */
+    fun fail(status: Int, code: String, message: String, state: String? = null, name: String? = null,
+             drainLimit: Long = 1024 * 1024) {
+        drain(drainLimit)
         try {
-            sendJson(status, ApiError.serializer(), ApiError(code, message))
+            sendJson(status, ApiError.serializer(), ApiError(code, message, state, name))
         } catch (e: IOException) {
             // the other side has gone; nothing to tell
         }
@@ -113,11 +114,11 @@ class Exchange internal constructor(
      * Reads a small unread body before answering. Closing a TLS connection with bytes still unread resets it,
      * and the sender would lose the error reply.
      */
-    fun drain() {
+    fun drain(limit: Long = 1024 * 1024) {
         if (bodyRead) return
         bodyRead = true
         val n = contentLength ?: return
-        if (n in 1..1024 * 1024) {
+        if (n in 1..limit) {
             try {
                 body.skipNBytesCompat(n)
             } catch (e: IOException) {

@@ -22,7 +22,10 @@ import okhttp3.Response
 import okio.BufferedSink
 import java.io.IOException
 import java.io.InputStream
+import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Collections
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 
 /** Another device, as discovery or "Add by IP" found it. [hosts] are its addresses, best first. */
@@ -40,7 +43,10 @@ data class Device(
 /** The device answered, but not the way the protocol says. */
 class SendException(message: String, val code: String = "") : IOException(message)
 
-/** One thing to send: its name on the other side (already Windows-safe) and its bytes. */
+/** The receiver still has an earlier try of this file open; ask again in a moment (PROTOCOL.md 3.3). */
+private class StillReceiving : IOException("the receiver is still busy with an earlier try")
+
+/** One thing to send: its name on the other side (already Windows-safe) and its bytes. [modified] is in milliseconds, 0 if unknown. */
 class SendItem(val name: String, val size: Long, val modified: Long = 0L, val open: () -> InputStream)
 
 /** Who this device is, as it tells others in an offer. */
@@ -60,6 +66,8 @@ private fun errorOf(text: String): ApiError? = try {
 } catch (e: Exception) {
     null
 }
+
+private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
 /**
  * Asks a device who it is (GET /info). With [expectedId], a device with another certificate is refused with
@@ -84,6 +92,10 @@ fun fetchInfo(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expec
 /**
  * One send to one device (PROTOCOL.md section 4), the same steps as the Windows app's SendJob. [run] blocks, so
  * call it on a worker thread. [onUpdate] is called on that thread whenever something changes.
+ *
+ * Files the receiver already has are left out when the person keeps "skip" on there ([skipped]). A connection that
+ * breaks in the middle of a file is picked up again inside the same offer (PROTOCOL.md 3.3, "Trying again after a
+ * break"); the file starts over from its first byte.
  */
 class SendJob(
     private val clients: Clients,
@@ -102,13 +114,26 @@ class SendJob(
         private set
     @Volatile var message = ""
         private set
-    val total: Long = items.sumOf { it.size }
+    /** Bytes that will really be sent: files the receiver already has are taken off once it answers. */
+    @Volatile var total: Long = items.sumOf { it.size }
+        private set
     @Volatile var sent = 0L
         private set
     @Volatile var current = ""
         private set
     /** The names the receiver saved, in order. */
     val saved = ArrayList<String>()
+    /** How many files were left out because the receiver already has them, and their size. */
+    @Volatile var skipped = 0
+        private set
+    @Volatile var skippedBytes = 0L
+        private set
+    /** How many sent files the receiver confirmed with the same SHA-256 as the bytes that were read here. */
+    @Volatile var verified = 0
+        private set
+    /** The connection broke and the send is waiting to try again (state stays SENDING). */
+    @Volatile var reconnecting = false
+        private set
     /** The address that answered. */
     @Volatile var host: String = device.hosts.firstOrNull() ?: ""
         private set
@@ -119,9 +144,15 @@ class SendJob(
     @Volatile private var cancelled = false
     @Volatile private var call: Call? = null
     private val rate = Rate()
+    /** Positions in [items] that are done: sent, or left out as already there. */
+    private val finished: MutableSet<Int> = Collections.synchronizedSet(HashSet())
+    private val retrySignal = Semaphore(0)
 
     val speed: Double get() = rate.speed()
     val etaSeconds: Long? get() = rate.eta(sent, total)
+
+    /** How many files are really being sent. */
+    private val fileCount: Int get() = items.size - skipped
 
     private fun update(state: State? = null, message: String? = null) {
         if (state != null) this.state = state
@@ -133,10 +164,19 @@ class SendJob(
         }
     }
 
+    /** The items that did not get there (not sent, not already on the other side), for a new offer. */
+    fun unfinished(): List<SendItem> = items.filterIndexed { i, _ -> i !in finished }
+
+    /** While waiting to try again: stop waiting and try now. */
+    fun retryNow() {
+        if (reconnecting) retrySignal.release()
+    }
+
     /** Stops the send: cuts the running request, then tells the receiver. */
     fun cancel() {
         cancelled = true
         call?.cancel()
+        retrySignal.release()
         Thread {
             try {
                 val body = ProtocolJson.encodeToString(CancelRequest.serializer(), CancelRequest(offerId)).toRequestBody(JSON)
@@ -155,15 +195,17 @@ class SendJob(
             val mismatch = Clients.mismatch(e)
             val file = fileFailure
             if (!cancelled) failure = e
+            reconnecting = false
             when {
                 mismatch != null -> update(State.FAILED, mismatch.message)
                 cancelled -> update(State.CANCELLED, "Cancelled")
                 e is SendException -> update(State.FAILED, e.message)
                 file != null -> update(State.FAILED, Errors.fileProblem(current.ifEmpty { "A file" }, file) +
-                    Errors.progressNote(saved.size, items.size))
-                else -> update(State.FAILED, Errors.connectionProblem(e, device.name, saved.size, items.size))
+                    Errors.progressNote(saved.size, fileCount))
+                else -> update(State.FAILED, Errors.connectionProblem(e, device.name, saved.size, fileCount))
             }
         }
+        reconnecting = false
     }
 
     /** The first address that answers with the right certificate. */
@@ -186,8 +228,9 @@ class SendJob(
     private fun send() {
         pickHost()
         if (cancelled) return update(State.CANCELLED, "Cancelled")
-        val files = items.mapIndexed { i, it -> OfferFile(i.toString(), it.name, it.size) }
-        val offer = OfferRequest(offerId, Sender(me.id, me.name, me.model, me.app), files, text, kind.ifEmpty { null })
+        val files = items.mapIndexed { i, it -> OfferFile(i.toString(), it.name, it.size, (it.modified / 1000).takeIf { s -> s > 0 }) }
+        val offer = OfferRequest(offerId, Sender(me.id, me.name, me.model, me.app), files, text, kind.ifEmpty { null },
+            skipOk = true.takeIf { files.isNotEmpty() })
         update(State.WAITING, "Waiting for ${device.name} to accept")
         val client = clients.pinned(device.id).newBuilder()
             .readTimeout(V1.OFFER_TIMEOUT_S + 15, TimeUnit.SECONDS).build()
@@ -203,26 +246,109 @@ class SendJob(
             }
             throw SendException(Errors.refusal(code, err, device.name, 0, files.size), err?.error ?: "")
         }
-        val tokens = try {
-            ProtocolJson.decodeFromString(OfferAccepted.serializer(), body).files
+        val accepted = try {
+            ProtocolJson.decodeFromString(OfferAccepted.serializer(), body)
         } catch (e: Exception) {
             throw SendException("${device.name} answered in a way Amanah doesn't understand. Check that both devices run the latest Amanah.")
         }
+        val tokens = accepted.files
+        val already = accepted.skip.orEmpty()
+        files.forEachIndexed { i, f ->
+            if (f.id in already) {
+                finished += i
+                skipped++
+                skippedBytes += f.size
+            }
+        }
+        total -= skippedBytes
         if (files.isEmpty()) return update(State.DONE, "Text sent")
+        if (skipped == files.size) return update(State.DONE, nothingNewMessage())
         update(State.SENDING, "Sending")
-        for ((f, item) in files.zip(items)) {
+        for ((i, f) in files.withIndex()) {
+            if (i in finished) continue
             if (cancelled) return update(State.CANCELLED, "Cancelled")
             current = f.name
-            saved += upload(f, item, tokens[f.id] ?: "")
+            saved += upload(f, items[i], tokens[f.id] ?: "")
+            finished += i
         }
         current = ""
-        update(State.DONE, "Sent ${files.size} file${if (files.size != 1) "s" else ""}")
+        update(State.DONE, doneMessage())
     }
 
+    private fun doneMessage(): String {
+        val n = saved.size
+        if (skipped == 0) return "Sent $n file${if (n != 1) "s" else ""}"
+        return "Sent $n new file${if (n != 1) "s" else ""}. ${if (skipped == 1) "1 was" else "$skipped were"} already on ${device.name}"
+    }
+
+    private fun nothingNewMessage(): String =
+        "Nothing new to send. ${if (skipped == 1) "That file was" else "All $skipped files were"} already on ${device.name}"
+
+    /**
+     * Sends one file, and sends it again from its first byte when the connection breaks (PROTOCOL.md 3.3). Waits 2, 4, 8,
+     * 15, then 30 seconds between tries. Gives up when nothing has worked for 3 minutes; a try that got 1 MB further than
+     * any earlier one starts the 3 minutes again. Only a plain broken connection is tried again: a refusal, a file that
+     * can't be read, a different certificate or a Cancel is final.
+     */
     private fun upload(f: OfferFile, item: SendItem, token: String): String {
+        val before = sent
+        var failingSince = 0L
+        var best = 0L
+        var step = 0
+        var problem: Exception? = null // why the last try failed; null on the first pass
+        while (true) {
+            if (problem != null) {
+                if (System.nanoTime() - failingSince > WINDOW_NS) {
+                    if (problem is StillReceiving) {
+                        throw SendException("${device.name} is still busy with an earlier try of ${f.name}. " +
+                            "Wait a minute, then send it again." + Errors.progressNote(saved.size, fileCount), "already")
+                    }
+                    throw problem
+                }
+                pause(RETRY_DELAYS_S[minOf(step++, RETRY_DELAYS_S.size - 1)])
+                if (cancelled) throw IOException("cancelled")
+                try {
+                    pickHost()
+                } catch (e: Exception) {
+                    if (cancelled || e !is IOException || Clients.mismatch(e) != null) throw e
+                    problem = e
+                    continue
+                }
+            }
+            if (reconnecting) {
+                reconnecting = false
+                update(State.SENDING, "Sending")
+            }
+            try {
+                return uploadOnce(f, item, token, before)
+            } catch (e: IOException) {
+                if (cancelled || fileFailure != null || e is SendException || Clients.mismatch(e) != null) throw e
+                val reached = sent - before
+                if (failingSince == 0L || reached >= best + PROGRESS_BYTES) {
+                    failingSince = System.nanoTime()
+                    step = 0
+                }
+                best = maxOf(best, reached)
+                sent = before
+                rate.reset()
+                problem = e
+            }
+        }
+    }
+
+    /** Waits [seconds], or less when the person taps "Try now" or cancels. */
+    private fun pause(seconds: Long) {
+        retrySignal.drainPermits()
+        reconnecting = true
+        update(State.SENDING, "The connection to ${device.name} dropped. Trying again in $seconds seconds.")
+        retrySignal.tryAcquire(seconds, TimeUnit.SECONDS)
+    }
+
+    private fun uploadOnce(f: OfferFile, item: SendItem, token: String, before: Long): String {
         val u = url(host, device.port, "/upload").toHttpUrl().newBuilder()
             .addQueryParameter("offer", offerId).addQueryParameter("file", f.id).addQueryParameter("token", token)
             .build()
+        val digest = MessageDigest.getInstance("SHA-256")
         val body = object : RequestBody() {
             override fun contentType() = "application/octet-stream".toMediaType()
             override fun contentLength() = item.size
@@ -247,7 +373,8 @@ class SendJob(
                             throw e
                         }
                         if (n < 0) throw SendException("${f.name} got shorter while it was being sent. Send it again." +
-                            Errors.progressNote(saved.size, items.size))
+                            Errors.progressNote(saved.size, fileCount))
+                        digest.update(buf, 0, n)
                         sink.write(buf, 0, n)
                         left -= n
                         sent += n
@@ -263,20 +390,47 @@ class SendJob(
         }
         val request = Request.Builder().url(u).put(body).build()
         clients.pinned(device.id).newCall(request).also { call = it }.execute().use { r ->
-            val text = r.bodyText()
+            val reply = r.bodyText()
+            if (r.code == 409) {
+                val err = errorOf(reply)
+                if (err?.error == "already") {
+                    when (err.state) {
+                        // an earlier try got there after all: the file counts as sent (nothing to check it against)
+                        "done" -> {
+                            sent = before + item.size
+                            rate.add(sent)
+                            return err.name?.takeIf { it.isNotEmpty() } ?: f.name
+                        }
+                        "receiving" -> throw StillReceiving()
+                    }
+                }
+            }
             if (r.code != 201) {
-                throw SendException(Errors.refusal(r.code, errorOf(text), device.name, saved.size, items.size))
+                val err = errorOf(reply)
+                throw SendException(Errors.refusal(r.code, err, device.name, saved.size, fileCount), err?.error ?: "")
             }
-            return try {
-                ProtocolJson.decodeFromString(UploadReply.serializer(), text).name
+            val ok = try {
+                ProtocolJson.decodeFromString(UploadReply.serializer(), reply)
             } catch (e: Exception) {
-                f.name
+                null
             }
+            val theirs = ok?.sha256
+            if (theirs != null) {
+                if (!theirs.equals(hex(digest.digest()), ignoreCase = true)) {
+                    throw SendException("${f.name} arrived damaged on ${device.name}, and the damaged copy was saved there. " +
+                        "Delete it there, then send ${f.name} again." + Errors.progressNote(saved.size, fileCount), "damaged")
+                }
+                verified++
+            }
+            return ok?.name ?: f.name
         }
     }
 
     private companion object {
         const val CHUNK = 256 * 1024
+        val RETRY_DELAYS_S = longArrayOf(2, 4, 8, 15, 30)
+        val WINDOW_NS = TimeUnit.MINUTES.toNanos(3)
+        const val PROGRESS_BYTES = 1024 * 1024L
     }
 }
 
@@ -288,6 +442,12 @@ class Rate(private val windowNs: Long = 5_000_000_000L) {
     fun add(done: Long, now: Long = System.nanoTime()) {
         points.addLast(now to done)
         while (points.size > 2 && now - points.first().first > windowNs) points.removeFirst()
+    }
+
+    /** Forgets what was measured, for a send that starts over. */
+    @Synchronized
+    fun reset() {
+        points.clear()
     }
 
     /** Bytes per second, or 0 before there is enough to tell. */

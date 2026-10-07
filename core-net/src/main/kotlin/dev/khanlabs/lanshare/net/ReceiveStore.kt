@@ -15,6 +15,21 @@ interface ReceiveStore {
     /** Starts one file. [relPath] is already checked with Names.cleanRelPath. */
     fun open(relPath: String, size: Long): Upload
 
+    /**
+     * The file this store already holds for the offered name, or null. Used to leave out files that are already here
+     * (PROTOCOL.md 3.2). It is a name, size and date check, never proof that the bytes are equal.
+     */
+    fun existing(relPath: String): Existing? = null
+
+    /**
+     * Called after a file was saved: [offered] is the name the sender used, [saved] the name it got, [mtime] the
+     * sender's modified time in seconds (null when unknown). A store that can keep the date or an index does so here.
+     */
+    fun remember(offered: String, saved: String, size: Long, mtime: Long?) {}
+
+    /** A file already in the store. [mtime] is in whole seconds, or null when the store can't tell. */
+    class Existing(val savedName: String, val size: Long, val mtime: Long?)
+
     interface Upload {
         val output: OutputStream
 
@@ -45,6 +60,17 @@ class FolderStore(private val root: File) : ReceiveStore {
     override fun freeSpace(): Long {
         root.mkdirs()
         return maxOf(0L, root.usableSpace - ReceiveStore.MIN_FREE)
+    }
+
+    override fun existing(relPath: String): ReceiveStore.Existing? {
+        val f = File(root, relPath)
+        if (!f.isFile) return null
+        return ReceiveStore.Existing(relPath, f.length(), f.lastModified().takeIf { it > 0 }?.div(1000))
+    }
+
+    override fun remember(offered: String, saved: String, size: Long, mtime: Long?) {
+        // keep the sender's date, so the next send of this file is recognised
+        if (mtime != null && mtime > 0) File(root, saved).setLastModified(mtime * 1000)
     }
 
     override fun open(relPath: String, size: Long): ReceiveStore.Upload {

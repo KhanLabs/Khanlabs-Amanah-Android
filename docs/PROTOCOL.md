@@ -82,10 +82,11 @@ Ask to send files and/or text. **The request stays open until the person answers
   "offer": "q3V9xY2kL0aB7cD4eF6gH8",
   "sender": {"id": "21E16B02…", "name": "Mueed's Pixel", "model": "android", "app": "KhanLabs LAN Share Android 1.0"},
   "files": [
-    {"id": "0", "name": "Holiday photos/IMG_001.jpg", "size": 2000000},
-    {"id": "1", "name": "Holiday photos/day 2/IMG_002.jpg", "size": 1800000}
+    {"id": "0", "name": "Holiday photos/IMG_001.jpg", "size": 2000000, "mtime": 1759824000},
+    {"id": "1", "name": "Holiday photos/day 2/IMG_002.jpg", "size": 1800000, "mtime": 1759827600}
   ],
-  "text": "Gate B12, boarding 14:05"
+  "text": "Gate B12, boarding 14:05",
+  "skip_ok": true
 }
 ```
 
@@ -96,6 +97,8 @@ Ask to send files and/or text. **The request stays open until the person answers
 | `files` | Up to 10,000 entries. `id` is any string up to 64 characters, unique in this offer. `name` is a relative path with `/` between folders. No empty parts, no `.` or `..`, no leading `/`, and every part must be a valid Windows file name (none of `\ / : * ? " < > \|`, no control characters, no trailing dot or space, not a reserved name such as `CON` or `NUL`, at most 255 characters). `size` is the exact size in bytes. |
 | `text` | Optional, at most 64 KB of UTF-8. |
 | `kind` | Optional. `"message"` marks a chat text: no files, only `text`. A receiver that already talks to this device may show it at once without asking (Amanah does this only for a device it already exchanged a message with that went through, and only when the request comes from an address that device announced). Any other receiver ignores the field and asks the person as for any text. |
+| `files[].mtime` | Optional. When the file was last changed, in whole seconds since 1 January 1970 (UTC), as the sender knows it. Leave it out when the sender can't tell. A receiver may use it to tell whether a file it already has is the same one (see `skip_ok`). |
+| `skip_ok` | Optional. `true` means "if you already have some of these files, you may leave them out; I understand the `skip` list in your answer". A sender that leaves it out always gets every file asked for. |
 
 The offer needs at least one file or some text. The whole JSON body may be up to 4 MB.
 
@@ -121,22 +124,32 @@ The 200 body gives one upload token per file:
 
 A text-only offer is complete as soon as it is accepted: the receiver shows the text, and there is nothing to upload.
 
+**Files the receiver already has (optional).** Only when the offer had `"skip_ok": true`, the receiver may add `skip`: the files it already has, each with the name it is saved under. A skipped file gets no token and nothing to upload. It counts as done.
+
+```json
+{"offer": "q3V9xY2kL0aB7cD4eF6gH8", "files": {"1": "pQ9…"}, "skip": {"0": "Holiday photos/IMG_001.jpg"}}
+```
+
+A receiver calls a file "already here" only when a file with the same relative name and the same size is in its receive folder and, when both sides know the modified time, the times are within 2 seconds of each other. This is a name, size and date check. It is not proof that the bytes are equal, so never call such a file "identical". The person at the receiving end may turn skipping off for an offer; then `skip` is left out and every file gets a token. If every file is skipped, `files` is empty and the offer is complete. A sender that gets `skip` without having asked ignores it and uploads whatever has a token.
+
 ### 3.3 `PUT /upload?offer=<offer>&file=<file id>&token=<token>`
 
 Send one file's bytes as the raw body (`Content-Type: application/octet-stream`). `Content-Length` must equal the size from the offer. Upload files one after another.
 
 | Status | `error` | Meaning |
 |---|---|---|
-| 201 | | Saved. Body: `{"ok": true, "name": "Holiday photos/IMG_001 (1).jpg"}` with the name it was saved as. |
+| 201 | | Saved. Body: `{"ok": true, "name": "Holiday photos/IMG_001 (1).jpg", "sha256": "9f86d0…"}` with the name it was saved as. `sha256` is optional: 64 lowercase hex digits, the SHA-256 of the bytes the receiver wrote. |
 | 400 | `wrong_size` | `Content-Length` doesn't match the offer. |
 | 403 | `bad_token` | Unknown offer, file or token. |
-| 409 | `already` | That file was already received, or is being received now. |
+| 409 | `already` | That file was already received, or is being received now. The body may also say `"state": "receiving"` or `"state": "done"`, and for `done` the saved name: `{"error": "already", "message": "…", "state": "done", "name": "Holiday photos/IMG_001.jpg"}`. |
 | 410 | `cancelled` | The send was cancelled. Stop sending. |
 | 411 | `length_required` | No `Content-Length`. Chunked uploads aren't supported. |
 | 507 | `no_space` | The disk filled up. |
 | 500 | `failed` | Something else went wrong while saving. |
 
 **Don't pause in the middle of a body.** Since 1.2.1 the receiver drops a connection that sends nothing for 60 seconds. The file is then marked failed and can be uploaded again from the start with the same token.
+
+**Trying again after a break (optional, for senders).** If the connection broke in the middle of a send, the sender may keep the same offer and `PUT /upload` the files that are not finished again, each from its first byte, with the same token. Wait 2, 4, 8, 15 and 30 seconds between tries, for up to 3 minutes in all. A connection that dropped without a goodbye can leave the receiver waiting on the old upload. A receiver therefore lets a new upload with the right token take over when the old one has received nothing for 3 seconds; before that it answers `409` with `"state": "receiving"`, and the sender waits and asks again. A `409` with `"state": "done"` means that file arrived: count it as sent. A `403 bad_token` or `410` means the receiver no longer has the offer; stop and make a new offer for the files that are left (the person is asked again). Uploads that broke are never resumed from the middle of a file in version 1.
 
 The receiver writes to a temporary file and only renames it into place when every byte has arrived, so a broken upload never leaves a half file. It never replaces an existing file: if the name is taken it saves as `name (1).ext`, `name (2).ext` and so on. Folders in the path are created as needed.
 

@@ -6,7 +6,8 @@ import java.nio.file.Files
 
 /**
  * Conformance mode, test code only: answers offers by the sender's name, like the Windows repo's
- * conformance/local_target.py ("[decline]" declines, "[wait]" gets no answer, anything else is accepted).
+ * conformance/local_target.py ("[decline]" declines, "[wait]" gets no answer, anything else is accepted;
+ * "[skip]" also leaves out the files that are already here, like the person keeping that box ticked).
  * A release build must never be able to do this.
  */
 class ConformanceAnswers : ReceiverEvents {
@@ -26,7 +27,8 @@ class ConformanceAnswers : ReceiverEvents {
         val name = offer.sender.name
         if ("[wait]" in name) return
         val accept = "[decline]" !in name
-        Thread { receiver.answer(offer.id, accept) }.apply { isDaemon = true }.start()
+        val skip = "[skip]" in name
+        Thread { receiver.answer(offer.id, accept, skip) }.apply { isDaemon = true }.start()
     }
 
     override fun onFinished(offer: Offer) {
