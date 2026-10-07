@@ -162,7 +162,12 @@ data class UiState(
     val outgoing: List<OutgoingView> = emptyList(),
     val conformanceAllowed: Boolean = false,
     val conformance: Boolean = false,
+    /** Where received files go, in words: Download/KhanLabs, or the folder the person chose. */
     val folder: String = Stores.SHOWN_PATH,
+    /** The person chose a folder but Android no longer lets the app write in it; files go to Download/KhanLabs until it is chosen again. */
+    val folderLost: Boolean = false,
+    /** Whether the folder in [folder] is one the person chose (Settings shows "Use Download/KhanLabs"). */
+    val folderChosen: Boolean = false,
     val history: List<HistoryEntry> = emptyList(),
     /** Every text in every conversation, oldest first. */
     val messages: List<ChatMessage> = emptyList(),
@@ -267,8 +272,43 @@ object Engine : ReceiverEvents {
         addresses = Discovery.lanAddresses()
         autoOffBaseline = addresses
         scheduleAutoOff()
+        recheckSaveFolder()
         refresh()
         checkSaved()
+    }
+
+    // --- the save folder
+
+    @Volatile private var saveFolder = Stores.SHOWN_PATH
+    @Volatile private var saveFolderLost = false
+    @Volatile private var saveFolderChosen = false
+
+    /**
+     * Reads again which folder files go to and whether the chosen one still works. It asks the folder's provider, so it
+     * runs off the main thread; the screens get the answer through [state]. Call it when the app comes to the front.
+     */
+    fun recheckSaveFolder() {
+        io.execute {
+            saveFolder = Stores.label(app)
+            saveFolderLost = Stores.folderLost(app)
+            saveFolderChosen = Stores.chosenTree(app) != null
+            refresh()
+        }
+    }
+
+    /**
+     * Saves files in the folder the system folder picker returned, or in Download/KhanLabs when [tree] is null.
+     * [onResult] is called on the main thread with words for the problem, or null when it worked.
+     */
+    fun setSaveFolder(tree: Uri?, onResult: (String?) -> Unit) {
+        io.execute {
+            val problem = Stores.choose(app, tree)
+            saveFolder = Stores.label(app)
+            saveFolderLost = Stores.folderLost(app)
+            saveFolderChosen = Stores.chosenTree(app) != null
+            refresh()
+            main.post { onResult(problem) }
+        }
     }
 
     // --- settings
@@ -436,7 +476,7 @@ object Engine : ReceiverEvents {
         synchronized(lock) {
             if (receiver != null) return true
             try {
-                val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.default(app) }, this, appLabel,
+                val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.current(app) }, this, appLabel,
                     peeker = SocketPeek, messageTrusted = ::trustsMessage)
                 rx.start()
                 receiver = rx
@@ -1249,6 +1289,9 @@ object Engine : ReceiverEvents {
                 haptics = haptics,
                 autoOff = autoOff,
                 autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
+                folder = saveFolder,
+                folderLost = saveFolderLost,
+                folderChosen = saveFolderChosen,
                 startTab = startTab,
                 theme = theme,
                 accent = accent,

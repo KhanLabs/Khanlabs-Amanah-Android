@@ -1,5 +1,9 @@
 package dev.khanlabs.lanshare.ui
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.net.AutoOff
+import dev.khanlabs.lanshare.store.Stores
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.UiState
 
@@ -61,6 +66,16 @@ internal fun SettingsTab(
     val context = LocalContext.current
     val version = remember { versionName(context) }
     var advanced by rememberSaveable { mutableStateOf(false) }
+    // [folder] is what the system folder picker gave back; null goes back to Download/KhanLabs
+    fun useFolder(folder: Uri?) {
+        Engine.setSaveFolder(folder) { problem ->
+            val text = problem ?: if (folder == null) "Files will be saved in ${Stores.SHOWN_PATH}" else "Files will be saved in the folder you chose"
+            Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        }
+    }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) useFolder(tree)
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -90,7 +105,19 @@ internal fun SettingsTab(
                     }
                 }
                 Rule()
-                SettingRow("Save files to", s.folder, onClick = { showFolder(context) }) { TextButton(onClick = { showFolder(context) }) { Text("Show") } }
+                SettingRow("Save files to", s.folder, onClick = { pickFolder.launch(null) }) {
+                    TextButton(onClick = { pickFolder.launch(null) }) { Text("Change") }
+                }
+                if (s.folderLost) {
+                    Muted("The folder you chose can't be used now (Android took back access, or it was deleted). " +
+                        "Files go to ${Stores.SHOWN_PATH} until you choose a folder again.", modifier = Modifier.padding(horizontal = 16.dp))
+                }
+                Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { showFolder(context) }) { Text("Show") }
+                    if (s.folderChosen || s.folderLost) {
+                        TextButton(onClick = { useFolder(null) }) { Text("Use ${Stores.SHOWN_PATH}") }
+                    }
+                }
             }
         }
         item {

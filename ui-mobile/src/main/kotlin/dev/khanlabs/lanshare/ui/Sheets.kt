@@ -138,7 +138,7 @@ internal fun OfferSheet(v: IncomingView) {
                 Column(Modifier.weight(1f)) {
                     Text(if (v.alreadyHere == 1) "Skip 1 file already here" else "Skip ${v.alreadyHere} files already here",
                         style = MaterialTheme.typography.bodyLarge)
-                    Muted("Same name and size as files in ${Stores.SHOWN_PATH}. Turn off to get a second copy.")
+                    Muted("Same name and size as files in ${Engine.state.value.folder}. Turn off to get a second copy.")
                 }
             }
         }

@@ -91,6 +91,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Engine.recheckSaveFolder() // Android may have taken back access to the folder chosen in Settings
         if (Engine.receiving) TransferService.start(this)
     }
 
