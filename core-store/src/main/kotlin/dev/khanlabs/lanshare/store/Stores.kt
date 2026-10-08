@@ -317,6 +317,8 @@ class LegacyStore(private val context: Context) : ReceiveStore {
     override fun remember(offered: String, saved: String, size: Long, mtime: Long?) =
         folder.remember(offered, saved, size, mtime)
 
+    override fun makeDir(relPath: String) = folder.makeDir(relPath)
+
     override fun open(relPath: String, size: Long): ReceiveStore.Upload {
         val inner = folder.open(relPath, size)
         return object : ReceiveStore.Upload by inner {

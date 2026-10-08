@@ -60,6 +60,10 @@ class TreeStore(context: Context, private val tree: Uri) : ReceiveStore {
         index.add(offered, saved, size, mtime)
     }
 
+    override fun makeDir(relPath: String) {
+        dirFor(relPath, create = true)
+    }
+
     /** A content address for a file saved in this folder (the name [ReceiveStore.Upload.commit] returned), or null. */
     fun uriOf(saved: String): Uri? = try {
         find(saved)?.let { docUri(it.docId) }

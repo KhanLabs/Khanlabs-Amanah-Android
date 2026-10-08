@@ -34,6 +34,13 @@ class ConformanceAnswers : ReceiverEvents {
     override fun onFinished(offer: Offer) {
         finished.add(offer)
     }
+
+    /** v2 sessions that came back after a restart. */
+    val resumed = java.util.concurrent.LinkedBlockingQueue<Offer>()
+
+    override fun onResumed(offer: Offer) {
+        resumed.add(offer)
+    }
 }
 
 fun startConformanceReceiver(
@@ -44,11 +51,14 @@ fun startConformanceReceiver(
     idleTimeoutMs: Int = 60_000,
     offerTimeoutMs: Long = 120_000,
     messageTrusted: (Offer) -> Boolean = { false },
+    /** Turns protocol v2 on; the parts and journals of its sessions go here. */
+    v2Dir: File? = null,
+    receiving: () -> Boolean = { true },
 ): Pair<Receiver, ConformanceAnswers> {
     val answers = ConformanceAnswers()
-    val rx = Receiver(identity, { ReceiverSettings("Conformance Android", true) }, { FolderStore(inbox) }, answers,
+    val rx = Receiver(identity, { ReceiverSettings("Conformance Android", receiving()) }, { FolderStore(inbox) }, answers,
         app = "Amanah Android test", port = port, host = host, idleTimeoutMs = idleTimeoutMs,
-        offerTimeoutMs = offerTimeoutMs, messageTrusted = messageTrusted)
+        offerTimeoutMs = offerTimeoutMs, messageTrusted = messageTrusted, v2Dir = v2Dir)
     answers.receiver = rx
     rx.start()
     return rx to answers

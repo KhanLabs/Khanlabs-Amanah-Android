@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.EOFException
+import java.io.File
 import java.io.IOException
 import java.net.InetAddress
 import java.net.SocketTimeoutException
@@ -40,6 +41,16 @@ class IncomingFile(val id: String, val name: String, val size: Long, val mtime: 
     /** Counts uploads of this file: a new upload that takes over from a stalled one bumps it. Guarded by `synchronized(this)`. */
     internal var generation = 0
     @Volatile internal var lastBytesAt: Long = System.nanoTime()
+
+    // --- protocol v2 (ReceiverV2); all guarded by `synchronized(this)`
+
+    /** The chunks received so far, and the SHA-256 of each (hex), indexed by chunk number. Null until the first chunk. */
+    internal var chunks: dev.khanlabs.lanshare.protocol.ChunkSet? = null
+    internal var digests: Array<String?>? = null
+    /** The sender's modified time in milliseconds, as the entry said. */
+    internal var mtimeMs: Long? = null
+    /** Why this file was left out: `already_here`, `too_large` or `dropped`; null when it was not. */
+    @Volatile internal var skipReason: String? = null
 }
 
 class Offer(
@@ -52,18 +63,26 @@ class Offer(
     val kind: String = "",
     /** The sender understands the `skip` list in the answer. */
     val skipOk: Boolean = false,
+    val created: Long = System.currentTimeMillis(),
 ) {
     @Volatile var state: String = "waiting" // waiting, accepted, declined, expired, cancelled, done
         internal set
     @Volatile internal var lastSeen: Long = System.nanoTime()
     internal val answered = CountDownLatch(1)
     internal var store: ReceiveStore? = null
-    val created: Long = System.currentTimeMillis()
     /** When this phone said yes, in milliseconds since 1970. 0 until then. */
     @Volatile var acceptedAt = 0L
 
+    /** v2: the session this offer is (PROTOCOL-v2.md). Null for a v1 offer. */
+    internal var v2: SessionV2? = null
+
+    /** v2: the size of the whole list as the sender summed it, known before the later pages of the list have arrived. -1 for v1. */
+    @Volatile internal var declaredTotal: Long = -1
+
     /** What will really be sent: files left out as "already here" don't count. */
-    val total: Long get() = files.sumOf { if (it.skipped) 0L else it.size }
+    val total: Long
+        get() = if (declaredTotal >= 0) maxOf(0L, declaredTotal - files.sumOf { if (it.skipped) it.size else 0L })
+        else files.sumOf { if (it.skipped) 0L else it.size }
     val received: Long get() = files.sumOf { if (it.skipped) 0L else it.received }
     val senderName: String get() = sender.name.ifEmpty { ip }.take(64)
 
@@ -82,6 +101,9 @@ interface ReceiverEvents {
 
     /** A chat text from a device the person already talks to. It was delivered without a prompt. */
     fun onMessage(offer: Offer) {}
+
+    /** After a restart: a v2 session that was accepted and not finished is back, so a sender can carry on. No prompt. */
+    fun onResumed(offer: Offer) {}
 }
 
 data class ReceiverSettings(val name: String, val receiving: Boolean)
@@ -96,8 +118,8 @@ class Receiver(
     /** Asked when an offer is accepted, so a changed folder applies to the next send. */
     private val store: () -> ReceiveStore,
     private val events: ReceiverEvents,
-    private val app: String,
-    private val model: String = "android",
+    internal val app: String,
+    internal val model: String = "android",
     port: Int = V1.DEFAULT_PORT,
     host: InetAddress? = null,
     idleTimeoutMs: Int = V1.IDLE_TIMEOUT_S * 1000,
@@ -106,6 +128,8 @@ class Receiver(
     private val offerTimeoutMs: Long = V1.OFFER_TIMEOUT_S * 1000,
     /** May this chat text skip the prompt? Only for a known device at an address it announced (see [onMessage]). */
     private val messageTrusted: (Offer) -> Boolean = { false },
+    /** Where protocol v2 keeps the parts and journals of sessions (app-private). Null leaves v2 off: only v1 is served. */
+    v2Dir: File? = null,
 ) {
     private val offers = LinkedHashMap<String, Offer>()
     private val lock = Any()
@@ -114,8 +138,10 @@ class Receiver(
         V1.MAX_CONN_PER_IP, V1.MAX_CONN_TOTAL, peekPlainHttp, peeker)
     val port: Int get() = server.port
     @Volatile private var sweeper: Thread? = null
+    private val v2: ReceiverV2? = v2Dir?.let { ReceiverV2(this, identity, it) }
 
     fun start() {
+        v2?.recover()
         server.start()
         sweeper = Thread(::sweep, "klshare-sweep").apply { isDaemon = true; start() }
     }
@@ -124,12 +150,31 @@ class Receiver(
         sweeper?.interrupt()
         sweeper = null
         val all = synchronized(lock) { offers.values.toList() }
-        for (o in all) if (o.state == "waiting" || o.state == "accepted") finish(o, "cancelled")
+        for (o in all) {
+            if (o.v2 != null) continue // a v2 session survives a stop, so the sender can carry on when receiving is back
+            if (o.state == "waiting" || o.state == "accepted") finish(o, "cancelled")
+        }
+        v2?.stop()
         server.stop()
     }
 
     fun info() = settings().let {
-        Info(V1.PROTOCOL, identity.id, it.name, model, app, it.receiving)
+        Info(V1.PROTOCOL, identity.id, it.name, model, app, it.receiving, protocols = if (v2 != null) listOf(1, 2) else null)
+    }
+
+    // --- for ReceiverV2, which presents each session as an Offer and so shares these
+
+    internal fun currentSettings() = settings()
+    internal fun newStore(): ReceiveStore = store()
+    internal fun registerOffer(offer: Offer): String = add(offer)
+    internal fun finishOffer(offer: Offer, state: String) = finish(offer, state)
+    internal fun fire(block: ReceiverEvents.() -> Unit) = notify(block)
+    internal fun allOffers(): List<Offer> = synchronized(lock) { offers.values.toList() }
+
+    /** A v2 session that came back from its journal after a restart. */
+    internal fun restore(offer: Offer) {
+        synchronized(lock) { offers[offer.id] = offer }
+        notify { onResumed(offer) }
     }
 
     fun get(offerId: String): Offer? = synchronized(lock) { offers[offerId] }
@@ -140,6 +185,7 @@ class Receiver(
      */
     fun answer(offerId: String, accept: Boolean, skip: Boolean = false): Boolean {
         val offer = get(offerId) ?: return false
+        offer.v2?.let { return v2?.answer(offer, it, accept, skip) ?: false }
         synchronized(offer) {
             if (offer.state != "waiting") return false
             if (accept) {
@@ -179,6 +225,7 @@ class Receiver(
         }
         if (wake) offer.answered.countDown()
         notify { onFinished(offer) }
+        offer.v2?.let { v2?.ended(it) }
     }
 
     /**
@@ -222,7 +269,7 @@ class Receiver(
      * Marks the files the receive folder already has: the same relative name and size, and when both sides know the
      * modified time, within 2 seconds of each other (PROTOCOL.md 3.2). A failing store just means nothing is marked.
      */
-    private fun markAlreadyHere(offer: Offer) {
+    internal fun markAlreadyHere(offer: Offer) {
         val s = try {
             store()
         } catch (e: Exception) {
@@ -254,7 +301,11 @@ class Receiver(
             val all = synchronized(lock) { offers.values.toList() }
             for (o in all) {
                 val idle = TimeUnit.NANOSECONDS.toSeconds(now - o.lastSeen)
-                if (o.state == "accepted" && idle > V1.SESSION_IDLE_S) {
+                if (o.v2 != null) {
+                    v2?.sweep(o, idle)
+                    // a v2 session that ended is kept for an hour, so a sender that was away can still read the result
+                    if (o.state != "waiting" && o.state != "accepted" && idle > V2_RETAIN_S) synchronized(lock) { offers.remove(o.id) }
+                } else if (o.state == "accepted" && idle > V1.SESSION_IDLE_S) {
                     finish(o, "cancelled") // the sender went quiet
                 } else if (o.state != "waiting" && o.state != "accepted" && idle > 300) {
                     synchronized(lock) { offers.remove(o.id) } // kept a while, so late uploads get a clear 410
@@ -267,6 +318,7 @@ class Receiver(
 
     private fun handle(x: Exchange) {
         if (!HttpsServer.hostAllowed(x.headers["host"])) return x.fail(421, "wrong_host", "Use the device's IP address")
+        if (x.path.startsWith(V2.API)) return v2?.handle(x) ?: x.fail(404, "not_found", "Unknown endpoint")
         when (x.method to x.path) {
             "GET" to "${V1.API}/info" -> x.sendJson(200, Info.serializer(), info())
             "POST" to "${V1.API}/offer" -> offer(x)
@@ -466,6 +518,7 @@ class Receiver(
     private class SupersededException : IOException("superseded")
 
     private companion object {
+        const val V2_RETAIN_S = 3600L
         const val CHUNK = 256 * 1024
 
         /** A second upload of a file may take over when nothing arrived on the first for this long. */

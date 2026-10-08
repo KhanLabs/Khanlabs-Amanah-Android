@@ -27,6 +27,12 @@ interface ReceiveStore {
      */
     fun remember(offered: String, saved: String, size: Long, mtime: Long?) {}
 
+    /**
+     * Makes an empty folder ([relPath] is checked like a file name), for a v2 entry of kind "dir". A store that can't
+     * hold an empty folder (MediaStore has only files) does nothing.
+     */
+    fun makeDir(relPath: String) {}
+
     /** A file already in the store. [mtime] is in whole seconds, or null when the store can't tell. */
     class Existing(val savedName: String, val size: Long, val mtime: Long?)
 
@@ -71,6 +77,11 @@ class FolderStore(private val root: File) : ReceiveStore {
     override fun remember(offered: String, saved: String, size: Long, mtime: Long?) {
         // keep the sender's date, so the next send of this file is recognised
         if (mtime != null && mtime > 0) File(root, saved).setLastModified(mtime * 1000)
+    }
+
+    override fun makeDir(relPath: String) {
+        val dir = File(root, relPath)
+        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("Couldn't create the folder $relPath")
     }
 
     override fun open(relPath: String, size: Long): ReceiveStore.Upload {
