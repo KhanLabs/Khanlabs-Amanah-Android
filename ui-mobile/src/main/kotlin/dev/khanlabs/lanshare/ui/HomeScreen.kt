@@ -145,6 +145,7 @@ fun HomeScreen(
     var joinNet by remember { mutableStateOf<Pair<String, String>?>(null) }  // asking whether to join this network
     var linkCode by remember { mutableStateOf<ConnectCode?>(null) }  // asking whether to add this device
     var connectMsg by remember { mutableStateOf<String?>(null) }  // the result of a scan, shown until dismissed
+    var pairOpen by remember { mutableStateOf(false) }   // showing a code for another device to pair with
     var renameOpen by remember { mutableStateOf(false) }
     var clearOpen by remember { mutableStateOf(false) }
     var detailsFor by remember { mutableStateOf<Device?>(null) }
@@ -243,6 +244,15 @@ fun HomeScreen(
     /** Add the device a code names, with its full ID pinned. A code that names a Wi-Fi network joins it first. */
     fun connect(code: ConnectCode) {
         connecting = true
+        if (code.isPair) {
+            connectingText = "Pairing with ${code.name.ifEmpty { "the device" }}."
+            Engine.pairWith(code) { name, error ->
+                connecting = false
+                connectMsg = if (name != null) "Paired with $name. It is in your device list. To take its files without asking, " +
+                    "turn that on under Settings, Paired devices." else error
+            }
+            return
+        }
         connectingText = if (code.hasWifi) "Joining the network, then checking the device. Android may ask you to allow it." else "Checking the device."
         val done = { device: Device?, error: String? ->
             connecting = false
@@ -265,7 +275,7 @@ fun HomeScreen(
         val code = ConnectCode.parse(text)
         val net = WifiCode.parse(text)
         when {
-            code != null && code.hasWifi -> linkCode = code
+            code != null && (code.hasWifi || code.isPair) -> linkCode = code
             code != null -> connect(code)
             net != null -> joinNet = net
             else -> connectMsg = "That QR code is not from Amanah, and it is not a Wi-Fi code."
@@ -389,7 +399,8 @@ fun HomeScreen(
                     )
                     Tab.Messages -> MessagesTab(s, onOpen = { chatPeer = it })
                     Tab.Activity -> ActivityTab(s.history, onStats = { statsOpen = true })
-                    Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { qrOpen = true }, { clearOpen = true }, { aboutOpen = true })
+                    Tab.Settings -> SettingsTab(s, onReceivingChange, { renameOpen = true }, { qrOpen = true }, { clearOpen = true }, { aboutOpen = true },
+                        onPair = { pairOpen = true })
                 }
             }
         }
@@ -411,6 +422,19 @@ fun HomeScreen(
     if (receivingOpen) ReceivingSheet(s, onReceivingChange, onRename = { renameOpen = true },
         onShowQr = { receivingOpen = false; qrOpen = true }, onDismiss = { receivingOpen = false })
     if (qrOpen) QrSheet(remember(s.addresses, s.port, s.name) { Engine.myCode() }, onDismiss = { qrOpen = false })
+    if (pairOpen) {
+        // the code is made when the sheet opens and taken off the screen when it closes (or after 10 minutes, or after one use)
+        LaunchedEffect(Unit) { if (!Engine.startPairing()) { pairOpen = false; toast(context, "Connect to Wi-Fi and turn Receiving on first.") } }
+        QrSheet(s.pairCode.takeIf { it.isNotEmpty() }?.let { ConnectCode.parse(it) }, onDismiss = { pairOpen = false; Engine.stopPairing() }, pairing = true)
+    }
+    // another device paired with this one: say so, and close the code
+    val firstPairing = remember { s.lastPairedAt }
+    LaunchedEffect(s.lastPairedAt) {
+        if (s.lastPairedAt > firstPairing) {
+            pairOpen = false
+            toast(context, "Paired with ${s.lastPaired}")
+        }
+    }
     if (helpOpen) HelpSheet(s, onScan = { helpOpen = false; scanOpen = true },
         onAddByIp = { helpOpen = false; addOpen = true }, onDismiss = { helpOpen = false })
     detailsFor?.let { d ->
@@ -432,7 +456,7 @@ fun HomeScreen(
     linkCode?.let { code ->
         AlertDialog(
             onDismissRequest = { linkCode = null },
-            title = { Text(if (code.hasWifi) "Join the network and add this device?" else "Add this device?") },
+            title = { Text(if (code.isPair) "Pair with this device?" else if (code.hasWifi) "Join the network and add this device?" else "Add this device?") },
             text = { Column {
                 Text(code.name.ifEmpty { "Unnamed device" }, style = MaterialTheme.typography.titleMedium)
                 Muted("${code.hosts.first()}:${code.port}  ·  ID ${DeviceId.short(code.id)}", mono = true)
@@ -440,10 +464,14 @@ fun HomeScreen(
                     Spacer(Modifier.height(8.dp))
                     Muted("Wi-Fi network: ${code.ssid}. It has no internet. Your phone's other apps keep using their own connection.")
                 }
+                if (code.isPair) {
+                    Spacer(Modifier.height(8.dp))
+                    Muted("Pairing proves each device to the other, and lets you take its files without asking if you turn that on for it later.")
+                }
                 Spacer(Modifier.height(8.dp))
-                Muted("Only add it if you scanned this code yourself.")
+                Muted(if (code.isPair) "Only pair if you are looking at that device's screen." else "Only add it if you scanned this code yourself.")
             } },
-            confirmButton = { Button(onClick = { linkCode = null; connect(code) }) { Text(if (code.hasWifi) "Join and add" else "Add") } },
+            confirmButton = { Button(onClick = { linkCode = null; connect(code) }) { Text(if (code.isPair) "Pair" else if (code.hasWifi) "Join and add" else "Add") } },
             dismissButton = { TextButton(onClick = { linkCode = null }) { Text("Cancel") } },
         )
     }

@@ -31,11 +31,18 @@ import dev.khanlabs.lanshare.net.Receiver
 import dev.khanlabs.lanshare.net.ReceiverEvents
 import dev.khanlabs.lanshare.net.ReceiverSettings
 import dev.khanlabs.lanshare.net.Scan
+import dev.khanlabs.lanshare.net.Pairing
+import dev.khanlabs.lanshare.net.PairingCode
+import dev.khanlabs.lanshare.net.ReceivePolicy
+import dev.khanlabs.lanshare.net.SendException
 import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.net.SendJob
 import dev.khanlabs.lanshare.net.ShareDownload
 import dev.khanlabs.lanshare.net.ShareFile
 import dev.khanlabs.lanshare.net.ShareServer
+import dev.khanlabs.lanshare.net.Trust
+import dev.khanlabs.lanshare.net.TrustStore
+import dev.khanlabs.lanshare.net.TrustedDevice
 import dev.khanlabs.lanshare.net.fetchInfo
 import dev.khanlabs.lanshare.net.withoutLocation
 import dev.khanlabs.lanshare.protocol.ConnectCode
@@ -195,6 +202,17 @@ data class UiState(
     val bootStart: Boolean = BootStart.DEFAULT,
     /** The Settings switch: blank the location in JPEG photos as they are sent (see [StripGps]). Off until the person turns it on. */
     val stripGps: Boolean = false,
+    /** Devices paired with this one (PROTOCOL-v2.md section 10), with their auto-accept switches. */
+    val trusted: List<TrustedDevice> = emptyList(),
+    /** Who may send here: [ReceivePolicy.ASK] or [ReceivePolicy.PAIRED]. */
+    val receivePolicy: String = ReceivePolicy.ASK,
+    /** With [ReceivePolicy.PAIRED]: anyone may ask until this time (milliseconds since 1970), as the person allowed for 10 minutes. */
+    val openUntil: Long = 0L,
+    /** The pairing code on screen, as its text for a QR code, or empty when none is. */
+    val pairCode: String = "",
+    /** The name of the device that last paired with this one, and when. The screen shows it once. */
+    val lastPaired: String = "",
+    val lastPairedAt: Long = 0L,
     /** The Settings choice of turning receiving off by itself: never, hour or network (see [AutoOff]). */
     val autoOff: String = AutoOff.NEVER,
     /** Why receiving is off when it turned itself off, in words for the status card; empty once it is turned on again. */
@@ -319,6 +337,121 @@ object Engine : ReceiverEvents {
             saveFolderChosen = Stores.chosenTree(app) != null
             refresh()
             main.post { onResult(problem) }
+        }
+    }
+
+    // --- trust: paired devices, who may send, pairing codes (PROTOCOL-v2.md section 10)
+
+    private val trustStore by lazy { TrustStore(File(app.noBackupFilesDir, "trusted-devices.json")) }
+    @Volatile private var pairing: PairingCode? = null
+    @Volatile private var pairCodeText = ""
+    @Volatile private var lastPaired = ""
+    @Volatile private var lastPairedAt = 0L
+
+    /** Who may send here: "ask" (everyone is asked, the default) or "paired" (only paired devices). */
+    val receivePolicy: String get() = prefs.getString("rx_policy", null) ?: ReceivePolicy.ASK
+
+    /** With "paired only": the time until which anyone may ask, because the person opened it for 10 minutes. */
+    val openUntil: Long get() = prefs.getLong("rx_open_until", 0L)
+
+    fun setReceivePolicy(policy: String) {
+        prefs.edit().putString("rx_policy", if (policy == ReceivePolicy.PAIRED) ReceivePolicy.PAIRED else ReceivePolicy.ASK)
+            .putLong("rx_open_until", 0L).apply()
+        refresh()
+    }
+
+    /** "Paired devices only" for all but the next 10 minutes: anyone may ask now, and then it closes again by itself. */
+    fun allowEveryoneForTenMinutes() {
+        prefs.edit().putString("rx_policy", ReceivePolicy.PAIRED).putLong("rx_open_until", System.currentTimeMillis() + ReceivePolicy.OPEN_MS).apply()
+        main.postDelayed({ refresh() }, ReceivePolicy.OPEN_MS + 500)
+        refresh()
+    }
+
+    fun removeTrusted(id: String) {
+        trustStore.remove(id)
+        refresh()
+    }
+
+    fun setAutoAccept(id: String, files: Boolean? = null, text: Boolean? = null) {
+        trustStore.setAuto(id, files, text)
+        refresh()
+    }
+
+    /** What the receiver asks about trust. */
+    private val trustHooks = object : Trust {
+        override fun isTrusted(id: String) = trustStore.get(id) != null
+        override fun autoAcceptFiles(id: String) = trustStore.get(id)?.autoFiles == true
+        override fun autoAcceptText(id: String) = trustStore.get(id)?.autoText == true
+        override fun acceptsStrangers() = ReceivePolicy.acceptsStrangers(receivePolicy, openUntil)
+        override fun pairing(): PairingCode? = pairing
+        override fun paired(id: String, name: String) {
+            trustStore.add(id, name)
+            lastPaired = name
+            lastPairedAt = System.currentTimeMillis()
+            refresh()
+        }
+        override fun withdrawPairing() = stopPairing()
+    }
+
+    /**
+     * Makes a pairing code and puts it on screen for 10 minutes: [UiState.pairCode] is its QR text. False when this phone
+     * is not listening on a Wi-Fi address yet, because the other device has nowhere to send its answer.
+     */
+    fun startPairing(): Boolean {
+        val s = state.value
+        val port = s.port ?: return false
+        val hosts = s.addresses.filter { ConnectCode.isLocalAddress(it) }.distinct()
+        if (hosts.isEmpty() || !receiving) return false
+        val code = ConnectCode.forPairing(identity.id, s.name, hosts.take(ConnectCode.MAX_HOSTS), port)
+        val shown = PairingCode(code.secretBytes(), System.currentTimeMillis() + PairingCode.LIFETIME_MS)
+        pairing = shown
+        pairCodeText = code.toText()
+        main.postDelayed({ if (pairing === shown) stopPairing() }, PairingCode.LIFETIME_MS + 500)
+        refresh()
+        return true
+    }
+
+    fun stopPairing() {
+        pairing = null
+        pairCodeText = ""
+        refresh()
+    }
+
+    /**
+     * Pairs with the device whose pairing code was scanned, and adds it to the saved devices. Calls back on the main thread
+     * with its name, or with words for what went wrong.
+     */
+    fun pairWith(code: ConnectCode, onResult: (name: String?, error: String?) -> Unit) {
+        io.execute {
+            var name: String? = null
+            var error: String? = null
+            try {
+                if (code.id == identity.id) throw SendException("That is this device.", "self")
+                val paired = Pairing.pair(clients, identity, me(), code)
+                trustStore.add(paired.id, paired.name)
+                name = paired.name
+                lastPaired = paired.name
+                lastPairedAt = System.currentTimeMillis()
+                // it is also a saved device now, so it shows in the lists
+                try {
+                    val d = fetchInfo(clients, code.hosts.first(), code.port, code.id, timeoutS = 3)
+                    synchronized(lock) {
+                        added.removeAll { it.id == d.id }
+                        added.add(d.copy(hosts = code.hosts))
+                    }
+                    saveAdded()
+                    noteReachable(listOf(d.id))
+                } catch (e: Exception) {
+                    // paired all the same
+                }
+            } catch (e: SendException) {
+                error = e.message
+            } catch (e: Exception) {
+                error = if (Clients.mismatch(e) != null) "The device at that address is not the one in the QR code. The code may be out of date."
+                else Errors.connectionProblem(e, code.name.ifEmpty { "That device" })
+            }
+            refresh()
+            main.post { onResult(name, error) }
         }
     }
 
@@ -501,7 +634,7 @@ object Engine : ReceiverEvents {
             if (receiver != null) return true
             try {
                 val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.current(app) }, this, appLabel,
-                    peeker = SocketPeek, messageTrusted = ::trustsMessage, v2Dir = File(app.noBackupFilesDir, V2_DIR))
+                    peeker = SocketPeek, messageTrusted = ::trustsMessage, v2Dir = File(app.noBackupFilesDir, V2_DIR), trust = trustHooks)
                 rx.start()
                 receiver = rx
                 listenError = null
@@ -624,6 +757,12 @@ object Engine : ReceiverEvents {
 
     /** A v2 send that was accepted and not finished comes back from its journal after a restart: shown again, with no prompt. */
     override fun onResumed(offer: Offer) {
+        synchronized(lock) { offers[offer.id] = offer }
+        refresh()
+    }
+
+    /** A paired device the person chose to take without asking: already accepted, shown as receiving, no prompt. */
+    override fun onAutoAccepted(offer: Offer) {
         synchronized(lock) { offers[offer.id] = offer }
         refresh()
     }
@@ -1342,6 +1481,12 @@ object Engine : ReceiverEvents {
                 haptics = haptics,
                 bootStart = bootStart,
                 stripGps = stripGps,
+                trusted = trustStore.all.sortedBy { it.name.lowercase() },
+                receivePolicy = receivePolicy,
+                openUntil = openUntil,
+                pairCode = pairCodeText,
+                lastPaired = lastPaired,
+                lastPairedAt = lastPairedAt,
                 autoOff = autoOff,
                 autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
                 folder = saveFolder,

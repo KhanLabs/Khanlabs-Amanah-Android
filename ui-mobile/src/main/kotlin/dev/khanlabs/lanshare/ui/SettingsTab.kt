@@ -45,6 +45,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.khanlabs.lanshare.net.AutoOff
+import dev.khanlabs.lanshare.net.ReceivePolicy
+import dev.khanlabs.lanshare.net.TrustedDevice
 import dev.khanlabs.lanshare.store.Stores
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.UiState
@@ -62,6 +64,7 @@ internal fun SettingsTab(
     onShowQr: () -> Unit,
     onClearHistory: () -> Unit,
     onAbout: () -> Unit,
+    onPair: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val version = remember { versionName(context) }
@@ -123,6 +126,33 @@ internal fun SettingsTab(
                     if (s.folderChosen || s.folderLost) {
                         TextButton(onClick = { useFolder(null) }) { Text("Use ${Stores.SHOWN_PATH}") }
                     }
+                }
+            }
+        }
+        item {
+            Group("Paired devices") {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Who can send to you", style = MaterialTheme.typography.bodyLarge)
+                    Muted(ReceivePolicy.describe(s.receivePolicy, s.openUntil))
+                    FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((key, label) in ReceivePolicy.CHOICES) {
+                            FilterChip(selected = s.receivePolicy == key, onClick = { Engine.setReceivePolicy(key) }, label = { Text(label) })
+                        }
+                    }
+                    if (s.receivePolicy == ReceivePolicy.PAIRED && System.currentTimeMillis() >= s.openUntil) {
+                        TextButton(onClick = { Engine.allowEveryoneForTenMinutes() }) { Text("Allow everyone for 10 minutes") }
+                    }
+                }
+                Rule()
+                SettingRow("Pair a device", "Show a code for another device to scan", onClick = onPair) { Glyph(Icons.ChevronRight) }
+                for (d in s.trusted) {
+                    Rule()
+                    TrustedRow(d)
+                }
+                if (s.trusted.isEmpty()) {
+                    Rule()
+                    Muted("No paired devices yet. A paired device proves who it is, so you can choose to take its files without asking.",
+                        modifier = Modifier.padding(16.dp))
                 }
             }
         }
@@ -265,6 +295,28 @@ private fun SettingRow(title: String, summary: String, onClick: (() -> Unit)? = 
 @Composable
 private fun Rule() {
     HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/** One paired device: its name, two switches for taking its files and texts without asking, and a way to unpair. */
+@Composable
+private fun TrustedRow(d: TrustedDevice) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(d.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Muted("ID ${d.id.take(6)}")
+            }
+            TextButton(onClick = { Engine.removeTrusted(d.id) }) { Text("Unpair") }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Take its files without asking", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = d.autoFiles, onCheckedChange = { Engine.setAutoAccept(d.id, files = it) })
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Take its texts without asking", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = d.autoText, onCheckedChange = { Engine.setAutoAccept(d.id, text = it) })
+        }
+    }
 }
 
 /** A round color to tap. The chosen one has a ring around it, and says so for a screen reader. */

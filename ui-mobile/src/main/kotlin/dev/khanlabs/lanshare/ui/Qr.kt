@@ -50,12 +50,16 @@ internal fun QrCode(text: String, modifier: Modifier = Modifier, description: St
     }
 }
 
-/** This device's QR code, for another device to scan. */
+/** This device's QR code, for another device to scan: a connect code, or with [pairing] a pairing code. */
 @Composable
-internal fun QrSheet(code: ConnectCode?, onDismiss: () -> Unit) {
+internal fun QrSheet(code: ConnectCode?, onDismiss: () -> Unit, pairing: Boolean = false) {
     Sheet(onDismiss) {
-        Text("Scan to connect", style = MaterialTheme.typography.titleLarge)
-        Muted("On the other device, open Amanah and choose Scan QR code. Scanning proves it is this device, not another one with the same name.")
+        Text(if (pairing) "Scan to pair" else "Scan to connect", style = MaterialTheme.typography.titleLarge)
+        Muted(
+            if (pairing) "On the other device, open Amanah and choose Scan QR code. Pairing proves each device to the other. " +
+                "This code works once, for 10 minutes, and only while this screen is open."
+            else "On the other device, open Amanah and choose Scan QR code. Scanning proves it is this device, not another one with the same name.",
+        )
         if (code == null) {
             Text("There is no code yet. Connect to Wi-Fi and turn Receiving on.", Modifier.padding(vertical = 24.dp))
         } else {
