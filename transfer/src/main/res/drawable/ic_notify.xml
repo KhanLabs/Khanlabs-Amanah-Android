@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Notification icon: the KhanLabs K with the arc under it, white on transparent -->
+<!-- Notification small icon: the Amanah mark, white on transparent. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -8,14 +8,11 @@
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="2.4"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M8,4 L8,16 M17,4 L9.5,10.5 L17,16" />
+        android:pathData="M4.25,18.75 L12,5.25 L19.75,18.75" />
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:pathData="M5,20.5 Q12,18.8 19,20.5" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10.12,14.5 a1.88,1.88 0 1,0 3.75,0 a1.88,1.88 0 1,0 -3.75,0z" />
 </vector>
