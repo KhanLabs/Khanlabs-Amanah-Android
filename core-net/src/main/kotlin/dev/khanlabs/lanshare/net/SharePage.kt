@@ -53,7 +53,7 @@ internal object SharePage {
         Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(SCRIPT.toByteArray(Charsets.UTF_8))) + "'"
 
     private const val ICON_SVG =
-        """<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="klbg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#171b24"/><stop offset="1" stop-color="#0a0c11"/></linearGradient></defs><rect width="256" height="256" rx="54" fill="url(#klbg)"/><rect x="1.5" y="1.5" width="253" height="253" rx="52.5" fill="none" stroke="#2a3038" stroke-width="2"/><text x="128" y="163" font-family="Georgia, 'Times New Roman', serif" font-size="132" font-weight="700" fill="#eef1f5" text-anchor="middle">K</text><path d="M58 190 Q 128 174 198 190" fill="none" stroke="#2dd4bf" stroke-width="11" stroke-linecap="round"/></svg>"""
+        """<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" rx="58" fill="#0F766E"/><path d="M59.8,191.4 L128,72.6 L196.2,191.4" fill="none" stroke="#FEF7FF" stroke-width="30.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="154" r="16.5" fill="#FEF7FF"/></svg>"""
 
     private val FAVICON = "data:image/svg+xml," + URLEncoder.encode(ICON_SVG, "UTF-8").replace("+", "%20")
 
@@ -221,105 +221,127 @@ internal object SharePage {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>{{TITLE}} — Amanah</title>
+<title>{{TITLE}} — Amanah by KhanLabs.dev</title>
 <link rel="icon" type="image/svg+xml" href="{{FAVICON}}">
 {{HEAD}}
 <style>
+  /* The look of the Amanah app: one accent, three surfaces (paper, card, raised), corners of 12, 20 and 28, one typeface,
+     short spring motion, flat surfaces. The numbers are the app's (Theme.kt and Theme.qml).
+     The list page has one tiny script that asks this server whether the list changed; without scripts the page reloads. */
   :root {
-    --paper: #080a0e; --card: #12151b; --card-2: #181c24;
-    --ink: #e7eaef; --muted: #97a0ad; --faint: #5c6470;
-    --border: #222831; --border-soft: #1b1f26;
-    --clay: #2dd4bf; --clay-strong: #5eead4; --clay-soft: rgba(45, 212, 191, 0.16); --on-clay: #080a0e;
-    --brick: #ff5f57;
-    --radius: 10px; --radius-sm: 7px;
-    --font-display: Georgia, 'Times New Roman', serif;
-    --font-body: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
-    --font-mono: 'Cascadia Code', Consolas, ui-monospace, monospace;
-    color-scheme: dark;
+    --paper: #FEF7FF; --card: #F7F2FA; --raised: #E6E0E9;
+    --ink: #1D1B20; --muted: #49454F; --border: #CAC4D0; --line: #E6E0E9;
+    --accent: #0F766E; --accent-ink: #FFFFFF; --accent-soft: rgba(15, 118, 110, 0.12);
+    --brick: #C62828;
+    --r8: 8px; --r12: 12px; --r20: 20px; --r28: 28px;
+    --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+    --quick: 140ms; --spring: cubic-bezier(0.3, 1.5, 0.5, 1);
+    color-scheme: light;
   }
-  @media (prefers-color-scheme: light) {
+  @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #f4efe4; --card: #fbf8f1; --card-2: #f0ead9;
-      --ink: #29251f; --muted: #6f675b; --faint: #a89e8c;
-      --border: #e4dcc8; --border-soft: #ece4d2;
-      --clay: #0d9488; --clay-strong: #0f766e; --clay-soft: rgba(13, 148, 136, 0.14); --on-clay: #fff;
-      --brick: #a8442f;
-      color-scheme: light;
+      --paper: #0B0D0E; --card: #151A1C; --raised: #1D2427;
+      --ink: #E8EEF0; --muted: #A9B4B8; --border: #2E3639; --line: #1D2427;
+      --accent: #2DD4BF; --accent-ink: #0B0D0E; --accent-soft: rgba(45, 212, 191, 0.14);
+      --brick: #FF5F57;
+      color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--paper); color: var(--ink); font: 15px/1.45 var(--font-body); }
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    background: var(--paper); color: var(--ink); font: 15px/1.5 var(--font);
+    font-variant-numeric: tabular-nums;
+  }
   .i { flex: none; display: block; }
-  .brand-bar { display: flex; align-items: center; gap: 12px; padding: 13px 20px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, var(--card) 0%, var(--card-2) 100%); }
+
+  /* brand bar: "Amanah by KhanLabs.dev" */
+  .brand-bar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--paper); }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .brand-icon { width: 27px; height: 27px; border-radius: 7px; flex: none; overflow: hidden; box-shadow: 0 0 0 1px var(--border-soft); }
+  .brand-icon { width: 30px; height: 30px; border-radius: 23%; flex: none; overflow: hidden; }
   .brand-icon svg { width: 100%; height: 100%; display: block; }
-  .brand-mark { font-family: var(--font-display); font-size: 19px; font-weight: 700; white-space: nowrap; }
-  .brand-mark .dev { color: var(--clay-strong); font-style: italic; }
-  .brand-divider { width: 1px; height: 16px; background: var(--border); flex: none; }
-  .brand-subtitle { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .brand-mark { font-size: 21px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; }
+  .brand-by { font-size: 13px; color: var(--muted); text-decoration: none; white-space: nowrap; padding-top: 3px; }
+  .brand-by:hover { color: var(--accent); text-decoration: underline; }
+
   main { flex: 1; width: 100%; max-width: 720px; margin: 0 auto; padding: 24px 16px 36px; }
-  h1 { font-family: var(--font-display); font-size: 25px; font-weight: 700; margin: 0 0 4px; line-height: 1.2; word-break: break-word; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; line-height: 1.2; word-break: break-word; }
   h2 { font-size: 15px; margin: 0 0 4px; }
-  .sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 16px; border-radius: var(--radius-sm); text-decoration: none; cursor: pointer; font: 600 14px/1.2 var(--font-body); border: 1px solid var(--border); background: var(--card-2); color: var(--ink); }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+
+  /* buttons: pills, like the app */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px;
+    padding: 8px 20px; border-radius: 999px; text-decoration: none; cursor: pointer;
+    font: 600 14px/1.2 var(--font); border: 1px solid transparent; background: var(--raised); color: var(--ink);
+    transition: transform var(--quick) var(--spring), border-color var(--quick) ease;
+  }
   .btn small { font-weight: 500; opacity: 0.8; }
-  .btn:hover { border-color: var(--clay); }
-  .btn:focus-visible { outline: none; border-color: var(--clay); box-shadow: 0 0 0 3px var(--clay-soft); }
-  .btn-primary { background: var(--clay); border-color: var(--clay); color: var(--on-clay); }
-  .btn-primary:hover { background: var(--clay-strong); border-color: var(--clay-strong); }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { border-color: var(--ink); }
+
   .all { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 14px; }
-  .note { color: var(--muted); font-size: 13px; }
-  .note a { color: var(--clay); text-decoration: none; }
+  .note { color: var(--muted); font-size: 13.5px; }
+  .note a { color: var(--accent); text-decoration: none; }
   .note a:hover { text-decoration: underline; }
   .banner { margin: 0 0 14px; }
-  .banner a { display: block; padding: 11px 14px; border-radius: var(--radius-sm); background: var(--clay-soft); border: 1px solid var(--clay); color: var(--clay-strong); text-decoration: none; font-weight: 600; }
-  .box { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--card); border: 1px solid var(--border); color: var(--muted); font-size: 13.5px; }
-  .box.warn { border-color: var(--brick); }
-  .sec { display: flex; align-items: center; gap: 10px; margin: 20px 0 8px; }
-  .sec h2 { margin: 0; font-size: 16px; }
-  .small { color: var(--faint); font-size: 12.5px; margin: 0 0 18px; }
-  .small a { color: var(--clay); text-decoration: none; }
-  .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font: 600 11.5px/1.7 var(--font-body); background: var(--card-2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
-  .tag.new { background: var(--clay); border-color: var(--clay); color: var(--on-clay); }
-  .tag.ok { color: var(--clay-strong); border-color: var(--clay); }
-  .tag.bad { color: var(--brick); border-color: var(--brick); }
-  ul.items { list-style: none; margin: 0 0 18px; padding: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  ul.items li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--border-soft); }
+  .banner a { display: block; padding: 12px 16px; border-radius: var(--r12); background: var(--accent-soft); color: var(--accent); text-decoration: none; font-weight: 600; }
+  .box { margin: 0 0 14px; padding: 12px 16px; border-radius: var(--r12); background: var(--card); color: var(--muted); font-size: 14px; }
+  .box.warn { box-shadow: inset 0 0 0 1.5px var(--brick); }
+  .sec { display: flex; align-items: center; gap: 10px; margin: 22px 0 8px; }
+  .sec h2 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+  .small { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .small a { color: var(--accent); text-decoration: none; }
+  .tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font: 600 12px/1.7 var(--font); background: var(--raised); color: var(--muted); white-space: nowrap; }
+  .tag.new { background: var(--accent); color: var(--accent-ink); }
+  .tag.ok { color: var(--accent); background: var(--accent-soft); }
+  .tag.bad { color: var(--brick); box-shadow: inset 0 0 0 1px var(--brick); background: transparent; }
+
+  ul.items { list-style: none; margin: 0 0 18px; padding: 0; background: var(--card); border-radius: var(--r20); overflow: hidden; }
+  ul.items li { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
   ul.items li:first-child { border-top: 0; }
   .ic { color: var(--muted); }
-  .dir .ic { color: var(--clay); }
+  .dir .ic { color: var(--accent); }
   .nm { flex: 1; min-width: 0; }
   .nm b { display: block; font-weight: 600; word-break: break-word; }
-  .nm .meta { font: 12px var(--font-mono); color: var(--muted); }
+  .nm .meta { font-size: 13px; color: var(--muted); }
   .act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 18px; }
-  .card p { margin: 0 0 12px; color: var(--muted); font-size: 13.5px; }
+
+  .card { background: var(--card); border-radius: var(--r20); padding: 18px; margin-bottom: 18px; }
+  .card p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
   .card .row { display: flex; flex-wrap: wrap; gap: 10px; }
-  .login { max-width: 380px; margin: 36px auto 0; text-align: center; }
-  .login input { width: 9em; padding: 10px 12px; text-align: center; letter-spacing: 6px; font: 600 20px var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-2); color: var(--ink); }
-  .login input:focus { outline: none; border-color: var(--clay); box-shadow: 0 0 0 3px var(--clay-soft); }
+  .login { max-width: 380px; margin: 36px auto 0; text-align: center; border-radius: var(--r28); padding: 28px 22px; }
+  .login input {
+    width: 9em; padding: 10px 12px; text-align: center; letter-spacing: 6px; font: 600 20px var(--font);
+    border: 1px solid transparent; border-radius: var(--r12); background: var(--raised); color: var(--ink);
+  }
+  .login input:focus { outline: none; border-color: var(--accent); }
   .login form { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-  .err { margin: 12px 0 0; color: var(--brick); font-size: 13.5px; }
+  .err { margin: 12px 0 0; color: var(--brick); font-size: 14px; }
   .ended { text-align: center; margin-top: 36px; }
-  .ended .ic { display: inline-flex; padding: 12px; border-radius: 50%; background: var(--clay-soft); color: var(--clay); margin-bottom: 12px; }
-  footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; padding: 14px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--faint); }
+  .ended .ic { display: inline-flex; padding: 14px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); margin-bottom: 12px; }
+
+  footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; padding: 14px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
   footer .made { color: var(--muted); }
   footer .heart { color: var(--brick); }
-  footer a { color: var(--clay); text-decoration: none; }
+  footer a { color: var(--accent); text-decoration: none; }
   footer a:hover { text-decoration: underline; }
   @media (max-width: 480px) { ul.items li { flex-wrap: wrap; } .act { width: 100%; justify-content: stretch; } .act .btn { flex: 1 1 100%; } }
+  @media (max-width: 360px) { .brand-by { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
 </style>
 </head>
 <body{{BODYATTR}}>
 <header class="brand-bar">
   <span class="brand">
     <span class="brand-icon">{{ICON}}</span>
-    <span class="brand-mark">KhanLabs<span class="dev">.dev</span></span>
+    <span class="brand-mark">Amanah</span>
   </span>
-  <span class="brand-divider"></span>
-  <span class="brand-subtitle">Amanah</span>
+  <a class="brand-by" href="https://khanlabs.dev" target="_blank" rel="noopener noreferrer">by KhanLabs.dev</a>
 </header>
 
 <main>
@@ -329,7 +351,7 @@ internal object SharePage {
 <footer>
   <span>{{VERSION}}</span>
   <span class="made">Made with <span class="heart" role="img" aria-label="love">&#9829;&#xFE0E;</span> by Khan</span>
-  <a href="https://khanlabs.dev" target="_blank" rel="noopener noreferrer">khanlabs.dev</a>
+  <a href="https://khanlabs.dev" target="_blank" rel="noopener noreferrer">KhanLabs.dev</a>
 </footer>
 {{SCRIPT}}
 </body>
