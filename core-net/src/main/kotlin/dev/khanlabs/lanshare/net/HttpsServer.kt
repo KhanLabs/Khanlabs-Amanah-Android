@@ -130,10 +130,11 @@ class Exchange internal constructor(
 
     /** An error reply: {"error": code, "message": message}, plus `state` and `name` where PROTOCOL.md 3.3 has them. */
     fun fail(status: Int, code: String, message: String, state: String? = null, name: String? = null,
-             drainLimit: Long = 1024 * 1024) {
+             drainLimit: Long = 1024 * 1024, missing: List<List<Long>>? = null, extra: Map<String, String> = emptyMap()) {
         drain(drainLimit)
         try {
-            sendJson(status, ApiError.serializer(), ApiError(code, message, state, name))
+            send(status, "application/json", ProtocolJson.encodeToString(ApiError.serializer(), ApiError(code, message, state, name, missing))
+                .toByteArray(Charsets.UTF_8), extra)
         } catch (e: IOException) {
             // the other side has gone; nothing to tell
         }

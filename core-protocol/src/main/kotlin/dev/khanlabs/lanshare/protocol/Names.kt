@@ -12,6 +12,8 @@ object Names {
     private val ELLIPSIS = Char(0x2026).toString()
     const val MAX_PART = 255
     const val MAX_PATH = 1024
+    private const val MAX_PART_V2 = 255   // bytes of UTF-8
+    private const val MAX_PATH_V2 = 4096  // bytes of UTF-8
 
     /** The name if it is a valid Windows file name, else null. Trailing dots and spaces are trimmed first. */
     fun cleanName(name: String): String? {
@@ -81,6 +83,27 @@ object Names {
 
     /** A relative path for sending, made of safe parts. */
     fun safeRelPath(parts: List<String>): String = parts.filter { it.isNotEmpty() && it != "." }.joinToString("/") { safePart(it) }
+
+    /**
+     * Protocol v2 (PROTOCOL-v2.md section 12): why a name a sender sent must be refused with `bad_files`, in words, or null
+     * when it is acceptable. Much looser than v1: the receiver makes the name safe itself ([safeFromV2]) instead of refusing it.
+     */
+    fun problemV2(name: String): String? {
+        if (name.isEmpty()) return "the name is empty"
+        if (name.toByteArray(Charsets.UTF_8).size > MAX_PATH_V2) return "the name is longer than 4,096 bytes"
+        if (name[0] == '/') return "a name cannot start with a slash"
+        if ('\\' in name) return "a name cannot contain a backslash"
+        if (name.any { it.code < 0x20 || it.code == 0x7F }) return "a name cannot contain control characters"
+        for (part in name.split('/')) {
+            if (part.isEmpty()) return "a name cannot have an empty part"
+            if (part == "." || part == "..") return "a name cannot contain . or .. parts"
+            if (part.toByteArray(Charsets.UTF_8).size > MAX_PART_V2) return "a file or folder name is longer than 255 bytes"
+        }
+        return null
+    }
+
+    /** The name of a v2 entry made valid on every platform the apps run on (the Windows rules), part by part. */
+    fun safeFromV2(name: String): String = name.split('/').joinToString("/") { safePart(it) }
 
     /** "a.txt" -> "a (n).txt", for names that are taken. */
     fun numbered(name: String, n: Int): String {

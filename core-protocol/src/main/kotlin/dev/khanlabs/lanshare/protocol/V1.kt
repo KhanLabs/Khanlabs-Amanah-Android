@@ -103,6 +103,8 @@ data class ApiError(
     val state: String? = null,
     /** On a 409 `already` with state `done`: the name the file was saved under. */
     val name: String? = null,
+    /** v2, on a 409 `missing_chunks`: the chunks that have not arrived, as half-open ranges (PROTOCOL-v2.md 7.3). */
+    val missing: List<List<Long>>? = null,
 )
 
 /** An error reply: HTTP status plus the fixed code from the protocol. */

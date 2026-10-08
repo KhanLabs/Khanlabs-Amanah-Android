@@ -118,6 +118,14 @@ object V2 {
     fun parseCert(der: ByteArray): X509Certificate =
         CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(der)) as X509Certificate
 
+    /** True when [certDer] is a certificate that holds an ECDSA P-256 public key. */
+    fun certKeyIsP256(certDer: ByteArray): Boolean = try {
+        val key = parseCert(certDer).publicKey
+        key is ECPublicKey && key.params.order == P256_ORDER
+    } catch (e: Exception) {
+        false
+    }
+
     /** True when the signature over message was made by the certificate's key, which must be ECDSA P-256. */
     fun verifyProof(certDer: ByteArray, signatureB64: String, message: ByteArray): Boolean = try {
         val key = parseCert(certDer).publicKey
