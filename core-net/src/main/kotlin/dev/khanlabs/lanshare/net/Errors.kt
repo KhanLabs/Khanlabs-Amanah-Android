@@ -24,6 +24,9 @@ object Errors {
     /** What the receiving device can answer to an offer or an upload. `{name}` is the device's name. */
     val BY_CODE: Map<String, String> = mapOf(
         "not_receiving" to "{name} isn't accepting files right now. Turn Receiving on in Amanah there, then send again.",
+        "not_trusted" to "{name} only takes files from paired devices. Pair with it first (Settings, Paired devices, on both devices), then send again.",
+        "no_pairing" to "{name} is not showing a pairing code any more. Show a new one there and scan it again.",
+        "bad_secret" to "That pairing code does not match. Show a new one on {name} and scan it again.",
         "declined" to "{name} declined.",
         "cancelled" to "{name} cancelled this send.",
         "timeout" to "No answer from {name} in time. Ask the person to look at the screen, then send again.",

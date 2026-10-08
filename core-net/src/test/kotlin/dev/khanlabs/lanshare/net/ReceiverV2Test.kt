@@ -90,7 +90,7 @@ class ReceiverV2Test {
         assertEquals(identity.id, a.id)
         assertEquals(listOf(1, 2), a.protocols)
         assertTrue(a.receiving)
-        assertEquals(setOf("proof", "resume", "batch"), a.features.toSet())
+        assertEquals(setOf("proof", "resume", "batch", "pair"), a.features.toSet())
         assertEquals(V2.DEFAULT_CHUNK, a.limits.chunkSize)
         assertEquals(4, a.limits.maxStreams)
         assertTrue(a.nonce != b.nonce)

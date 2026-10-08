@@ -41,6 +41,13 @@ class ConformanceAnswers : ReceiverEvents {
     override fun onResumed(offer: Offer) {
         resumed.add(offer)
     }
+
+    /** Sends from paired devices that were taken without a prompt. */
+    val autoAccepted = java.util.concurrent.LinkedBlockingQueue<Offer>()
+
+    override fun onAutoAccepted(offer: Offer) {
+        autoAccepted.add(offer)
+    }
 }
 
 fun startConformanceReceiver(
@@ -54,11 +61,12 @@ fun startConformanceReceiver(
     /** Turns protocol v2 on; the parts and journals of its sessions go here. */
     v2Dir: File? = null,
     receiving: () -> Boolean = { true },
+    trust: Trust = Trust.NONE,
 ): Pair<Receiver, ConformanceAnswers> {
     val answers = ConformanceAnswers()
     val rx = Receiver(identity, { ReceiverSettings("Conformance Android", receiving()) }, { FolderStore(inbox) }, answers,
         app = "Amanah Android test", port = port, host = host, idleTimeoutMs = idleTimeoutMs,
-        offerTimeoutMs = offerTimeoutMs, messageTrusted = messageTrusted, v2Dir = v2Dir)
+        offerTimeoutMs = offerTimeoutMs, messageTrusted = messageTrusted, v2Dir = v2Dir, trust = trust)
     answers.receiver = rx
     rx.start()
     return rx to answers

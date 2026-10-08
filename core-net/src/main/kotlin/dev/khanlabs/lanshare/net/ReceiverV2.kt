@@ -13,6 +13,8 @@ import dev.khanlabs.lanshare.protocol.ManifestPage
 import dev.khanlabs.lanshare.protocol.ManifestReply
 import dev.khanlabs.lanshare.protocol.Names
 import dev.khanlabs.lanshare.protocol.OkReply
+import dev.khanlabs.lanshare.protocol.PairReply
+import dev.khanlabs.lanshare.protocol.PairRequest
 import dev.khanlabs.lanshare.protocol.ProtocolException
 import dev.khanlabs.lanshare.protocol.ProtocolJson
 import dev.khanlabs.lanshare.protocol.Sender
@@ -114,6 +116,7 @@ internal class ReceiverV2(
             when {
                 x.method == "GET" && parts == listOf("info") -> x.sendJson(200, InfoV2.serializer(), info(x.remoteIp))
                 x.method == "POST" && parts == listOf("sessions") -> createSession(x)
+                x.method == "POST" && parts == listOf("pair") -> pair(x)
                 parts.size >= 2 && parts[0] == "sessions" -> sessionRoute(x, parts)
                 else -> x.fail(404, "not_found", "Unknown endpoint")
             }
@@ -130,7 +133,7 @@ internal class ReceiverV2(
     fun info(ip: String): InfoV2 {
         val s = rx.currentSettings()
         return InfoV2(id = identity.id, name = s.name, model = rx.model, app = rx.app, receiving = s.receiving,
-            features = listOf("proof", "resume", "batch"), limits = limits, nonce = nonces.issue(ip))
+            features = listOf("proof", "resume", "batch", "pair"), limits = limits, nonce = nonces.issue(ip))
     }
 
     private fun sessionRoute(x: Exchange, parts: List<String>) {
@@ -194,6 +197,11 @@ internal class ReceiverV2(
             return sendState(x, s, withToken = true)
         }
 
+        // "Paired devices only": a proven sender that is not paired is turned away before the person is bothered
+        val trusted = rx.trust.isTrusted(proven.id)
+        if (!trusted && !rx.trust.acceptsStrangers()) {
+            throw ProtocolException(403, "not_trusted", "This device only takes files from paired devices")
+        }
         val text = req.text.orEmpty()
         if (text.toByteArray(Charsets.UTF_8).size > V1.MAX_TEXT) throw ProtocolException(400, "bad_text", "text must be at most 64 KB")
         val summary = req.summary
@@ -229,8 +237,35 @@ internal class ReceiverV2(
         if (req.files.isNotEmpty()) s.journal.append('F', ProtocolJson.encodeToString(ListSerializer(FileEntry.serializer()), req.files))
         if (s.manifestComplete) s.journal.append('M')
         if (summary.count <= limits.manifestPage && req.files.isNotEmpty()) rx.markAlreadyHere(offer)
-        rx.fire { onOffer(offer) }
+        // a paired device the person chose to trust is taken without asking (files and texts are separate switches)
+        val auto = trusted && (if (summary.count == 0L) rx.trust.autoAcceptText(proven.id) else rx.trust.autoAcceptFiles(proven.id))
+        if (auto) {
+            rx.fire { onAutoAccepted(offer) }
+            answer(offer, s, accept = true, skip = true)
+        } else {
+            rx.fire { onOffer(offer) }
+        }
         sendState(x, s, withToken = true)
+    }
+
+    // --- pairing
+
+    /** `POST /pair` (PROTOCOL-v2.md section 10.2): the scanner proves who it is and shows it read the code on screen. */
+    private fun pair(x: Exchange) {
+        val req = readJson(x, PairRequest.serializer())
+        val code = rx.trust.pairing()
+        if (code == null || code.expired()) throw ProtocolException(403, "no_pairing", "No pairing code is on screen")
+        val proven = DeviceProof.check(nonces, x.remoteIp, identity.id, "pair", "", req.sender, req.cert, req.nonce, req.proof)
+        val expected = V2.pairMac(code.secret, identity.id, proven.id)
+        val given = req.mac.trim().lowercase()
+        if (!MessageDigest.isEqual(expected.toByteArray(), given.toByteArray())) {
+            val wrong = synchronized(code) { ++code.wrong }
+            if (wrong >= PairingCode.MAX_WRONG) rx.trust.withdrawPairing() // five wrong answers: a new code must be shown
+            throw ProtocolException(403, "bad_secret", "The pairing code does not match")
+        }
+        rx.trust.paired(proven.id, Names.shown(req.sender.name).ifEmpty { proven.id.take(6) }.take(63))
+        rx.trust.withdrawPairing() // one code, one pairing
+        x.sendJson(200, PairReply.serializer(), PairReply(true, identity.id, rx.currentSettings().name))
     }
 
     /** Checks a page of the list as a whole, then adds it; a page with one bad entry changes nothing. */

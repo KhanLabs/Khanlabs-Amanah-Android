@@ -111,6 +111,9 @@ interface ReceiverEvents {
 
     /** After a restart: a v2 session that was accepted and not finished is back, so a sender can carry on. No prompt. */
     fun onResumed(offer: Offer) {}
+
+    /** A paired device whose sends are taken without asking started one: it is already accepted. No prompt. */
+    fun onAutoAccepted(offer: Offer) {}
 }
 
 data class ReceiverSettings(val name: String, val receiving: Boolean)
@@ -137,6 +140,8 @@ class Receiver(
     private val messageTrusted: (Offer) -> Boolean = { false },
     /** Where protocol v2 keeps the parts and journals of sessions (app-private). Null leaves v2 off: only v1 is served. */
     v2Dir: File? = null,
+    /** Which devices are paired, who may send at all, and the pairing code on screen. */
+    internal val trust: Trust = Trust.NONE,
 ) {
     private val offers = LinkedHashMap<String, Offer>()
     private val lock = Any()
@@ -365,6 +370,8 @@ class Receiver(
     private fun offer(x: Exchange) {
         val data = readJson(x) ?: return
         if (!settings().receiving) return x.fail(403, "not_receiving", "This device isn't accepting files right now")
+        // a v1 offer proves nothing about who sends it, so with "Paired devices only" it is turned away
+        if (!trust.acceptsStrangers()) return x.fail(403, "not_trusted", "This device only takes files from paired devices")
         val checked = try {
             OfferCheck.check(data)
         } catch (e: ProtocolException) {
