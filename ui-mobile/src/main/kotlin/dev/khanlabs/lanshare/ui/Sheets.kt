@@ -327,10 +327,12 @@ internal fun WhatToSendSheet(d: Device, onChoose: (Kind) -> Unit, onDismiss: () 
         ActionRow(Icons.Image, "Photos and videos") { onChoose(Kind.Media) }
         ActionRow(Icons.Folder, "Folder") { onChoose(Kind.Folder) }
         ActionRow(Icons.Chat, "Message") { onChoose(Kind.Text) }
+        ActionRow(Icons.Copy, "Clipboard", "Send what you copied") { onChoose(Kind.Clipboard) }
     }
 }
 
-internal enum class Kind { Files, Media, Folder, Text }
+/** Clipboard is only offered once a device is chosen: it is sent to that device at once. */
+internal enum class Kind { Files, Media, Folder, Text, Clipboard }
 
 // --- receiving
 

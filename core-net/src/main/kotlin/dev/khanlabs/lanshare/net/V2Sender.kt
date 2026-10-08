@@ -156,7 +156,7 @@ internal class V2Sender(private val job: SendJob, private val identity: Identity
         for (attempt in 0..1) {
             val made = DeviceProof.make(identity, device.id, "session", nonce, sid)
             val request = SessionCreate(sid, SenderInfo(identity.id, job.me.name, job.me.model, job.me.app), made.cert, nonce, made.proof,
-                summary, first, more = entries.size > first.size)
+                summary, first, more = entries.size > first.size, text = job.text.ifEmpty { null })
             val post = Request.Builder().url(u("/sessions"))
                 .post(ProtocolJson.encodeToString(SessionCreate.serializer(), request).toRequestBody(JSON)).build()
             val result = call(post) { r ->
@@ -857,6 +857,7 @@ internal class V2Sender(private val job: SendJob, private val identity: Identity
         }
         val extra = if (leftOut.isEmpty()) "" else ". ${leftOut.size} left out"
         when {
+            job.items.isEmpty() -> job.update(SendJob.State.DONE, "Text sent")
             job.saved.isEmpty() && job.skipped > 0 -> job.update(SendJob.State.DONE, job.nothingNewMessage())
             else -> job.update(SendJob.State.DONE, job.doneMessage() + extra)
         }

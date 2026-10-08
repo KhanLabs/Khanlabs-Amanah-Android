@@ -243,6 +243,68 @@ class TrustTest {
         assertEquals(202, unpaired.code)
     }
 
+    // --- clipboard push
+
+    @Test
+    fun theClipboardSwitchIsOffByDefaultKeptAcrossRestartsAndAnOldFileStillLoads() {
+        val file = File(tmp, "clip.json")
+        val a = TrustStore(file)
+        a.add("A".repeat(64), "Pixel")
+        assertFalse(a.get("A".repeat(64))!!.autoClip, "off until the person turns it on")
+        a.setAuto("A".repeat(64), clip = true)
+        a.add("A".repeat(64), "Pixel 8") // a rename keeps the switches
+        val b = TrustStore(file).get("A".repeat(64))!!
+        assertTrue(b.autoClip)
+        assertFalse(b.autoFiles)
+        assertFalse(b.autoText)
+        TrustStore(file).setAuto("A".repeat(64), files = true) // another switch leaves the clipboard one alone
+        assertTrue(TrustStore(file).get("A".repeat(64))!!.autoClip)
+        // a list written before the switch existed
+        val old = File(tmp, "old.json")
+        old.writeText("""[{"id":"${"B".repeat(64)}","name":"Old","pairedAt":1,"autoFiles":true,"autoText":false}]""")
+        val loaded = TrustStore(old).get("B".repeat(64))!!
+        assertTrue(loaded.autoFiles)
+        assertFalse(loaded.autoClip)
+    }
+
+    @Test
+    fun aPushedTextFromAPairedDeviceThatTakesTextsWithoutAskingArrivesAtOnceOverV2() {
+        trust.store.add(me.id, "My phone")
+        trust.store.setAuto(me.id, text = true)
+        val j = SendJob(clients, meInfo(), device(), emptyList(), "Gate B12", identity = me, pushText = true)
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        assertEquals("Text sent", j.message)
+        assertEquals(0, answers.asked.size, "nobody was asked")
+        val offer = answers.finished.poll(5, TimeUnit.SECONDS)
+        assertNotNull(offer)
+        assertEquals("Gate B12", offer.text)
+        assertTrue(offer.isV2, "the proof is what lets it in without asking")
+        assertTrue(offer.files.isEmpty())
+        assertEquals(me.id, offer.sender.id)
+    }
+
+    @Test
+    fun aPushedTextFromADeviceThatIsNotPairedStillAsks() {
+        val j = SendJob(clients, meInfo(), device(), emptyList(), "hello", identity = me, pushText = true)
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        assertEquals(1, answers.asked.size, "an unpaired device is asked about as usual")
+        assertEquals("hello", answers.finished.poll(5, TimeUnit.SECONDS)!!.text)
+    }
+
+    @Test
+    fun aTextSentWithFilesOverV2KeepsItsText() {
+        val j = SendJob(clients, meInfo(), device(), listOf(item("with/note.txt", Random.nextBytes(30))), "see the file", identity = me)
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        val offer = answers.finished.poll(5, TimeUnit.SECONDS)
+        assertNotNull(offer)
+        assertTrue(offer.isV2)
+        assertEquals("see the file", offer.text)
+        assertEquals(1, offer.files.size)
+    }
+
     @Test
     fun theProofIsWhatMakesAnIdBelongToADevice() {
         // a paired device's ID typed into a v1 offer by someone else gets no free pass: v1 offers are never trusted

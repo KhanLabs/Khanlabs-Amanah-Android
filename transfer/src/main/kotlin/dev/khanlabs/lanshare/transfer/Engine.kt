@@ -1,6 +1,8 @@
 package dev.khanlabs.lanshare.transfer
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -374,8 +376,8 @@ object Engine : ReceiverEvents {
         refresh()
     }
 
-    fun setAutoAccept(id: String, files: Boolean? = null, text: Boolean? = null) {
-        trustStore.setAuto(id, files, text)
+    fun setAutoAccept(id: String, files: Boolean? = null, text: Boolean? = null, clip: Boolean? = null) {
+        trustStore.setAuto(id, files, text, clip)
         refresh()
     }
 
@@ -786,6 +788,10 @@ object Engine : ReceiverEvents {
             // a text on its own is a message: it goes into the conversation, not the activity list
             synchronized(lock) { offers.remove(offer.id) }
             receiveMessage(offer.sender.id, offer.sender.name, offer.ip, offer.text)
+            // a push from a paired device the person chose to put on the clipboard
+            if (ClipboardPush.shouldCopy(offer.isV2, offer.state, offer.files.isNotEmpty(), offer.text, trustStore.get(offer.sender.id))) {
+                copyToClipboard(offer.text)
+            }
             refresh()
             return
         }
@@ -990,10 +996,27 @@ object Engine : ReceiverEvents {
         for ((n, d) in unique.withIndex()) start(d, copies.map { it[n] }, text)
     }
 
+    /**
+     * Sends [text] (what the person copied) to [device] as a clipboard push: a protocol v2 text, which a paired device that
+     * takes texts without asking accepts at once. A device that only does v1 gets it as a text offer the person answers.
+     * Call it from the screen the person is looking at: Android lets only the app in front read the clipboard.
+     */
+    fun sendClipboard(device: Device, text: String) = start(device, emptyList(), text, pushText = true)
+
+    /** Puts [text] on this phone's clipboard. Writing from the background is allowed; Android 13 and later says it was copied. */
+    private fun copyToClipboard(text: String) = main.post {
+        try {
+            val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("Amanah", text))
+        } catch (e: Exception) {
+            errors.add("couldn't put a pushed text on the clipboard: ${e.message}")
+        }
+    }
+
     /** Begins a send of items that are ready as they are (the location, if asked for, is already blanked). */
-    private fun start(device: Device, items: List<SendItem>, text: String) {
+    private fun start(device: Device, items: List<SendItem>, text: String, pushText: Boolean = false) {
         val key = keys.incrementAndGet()
-        val job = SendJob(clients, me(), device, items, text, identity = identity) { refresh() }
+        val job = SendJob(clients, me(), device, items, text, identity = identity, pushText = pushText) { refresh() }
         synchronized(lock) {
             jobs[key] = job
             previews[key] = Previews.of(items)

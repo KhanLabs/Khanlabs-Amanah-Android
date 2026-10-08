@@ -1,5 +1,6 @@
 package dev.khanlabs.lanshare.ui
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -71,6 +72,7 @@ import dev.khanlabs.lanshare.net.SendItem
 import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.WifiCode
+import dev.khanlabs.lanshare.transfer.ClipboardPush
 import dev.khanlabs.lanshare.transfer.Engine
 import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.HeldFiles
@@ -197,6 +199,19 @@ fun HomeScreen(
                 val d = dest
                 dest = null
                 if (d != null) chatPeer = d.id else tab = Tab.Messages
+            }
+            Kind.Clipboard -> {
+                // read only now, on the person's tap, while this app is in front: Android lets nothing else read the clipboard
+                val d = dest
+                dest = null
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                when {
+                    d == null -> {}
+                    ClipboardPush.isEmpty(text) -> toast(context, "Nothing copied yet. Copy some text first.")
+                    ClipboardPush.tooLong(text) -> toast(context, "That text is too long to send (the limit is 64 KB).")
+                    else -> Engine.sendClipboard(d, text)
+                }
             }
         }
     }

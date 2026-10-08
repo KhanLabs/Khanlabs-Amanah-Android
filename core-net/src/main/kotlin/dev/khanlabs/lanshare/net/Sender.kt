@@ -147,6 +147,11 @@ class SendJob(
     internal val identity: Identity? = null,
     /** False sends with v1 even to a device that does v2 (for tests, and for a device that misbehaves with v2). */
     private val allowV2: Boolean = true,
+    /**
+     * [text] with no files goes as a protocol v2 session to a device that does v2 (a clipboard push). Only a proven
+     * sender can be taken without asking, so a text that should arrive that way needs v2; a chat text stays on v1.
+     */
+    private val pushText: Boolean = false,
     private val onUpdate: (SendJob) -> Unit = {},
 ) {
     enum class State { CONNECTING, WAITING, SENDING, DONE, DECLINED, FAILED, CANCELLED }
@@ -330,7 +335,8 @@ class SendJob(
         pickHost()
         if (cancelled) return update(State.CANCELLED, "Cancelled")
         // a device that does v2 is sent to with v2 (resume, checked files, fast small files); a text on its own stays on v1
-        if (allowV2 && identity != null && items.isNotEmpty() && 2 in peerProtocols) {
+        // unless it is a push, which has to be proven to be taken without asking
+        if (allowV2 && identity != null && (items.isNotEmpty() || (pushText && text.isNotEmpty())) && 2 in peerProtocols) {
             val sender = V2Sender(this, identity)
             v2 = sender
             if (sender.run()) return

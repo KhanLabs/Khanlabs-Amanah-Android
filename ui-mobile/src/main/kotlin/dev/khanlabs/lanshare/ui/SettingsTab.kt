@@ -316,6 +316,13 @@ private fun TrustedRow(d: TrustedDevice) {
             Text("Take its texts without asking", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
             Switch(checked = d.autoText, onCheckedChange = { Engine.setAutoAccept(d.id, text = it) })
         }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Put its pushed texts on my clipboard", style = MaterialTheme.typography.bodyMedium)
+                Muted("Only a text it sends with Clipboard, never a chat message.")
+            }
+            Switch(checked = d.autoClip, onCheckedChange = { Engine.setAutoAccept(d.id, clip = it) })
+        }
     }
 }
 

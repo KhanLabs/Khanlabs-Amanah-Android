@@ -70,6 +70,8 @@ data class TrustedDevice(
     val autoFiles: Boolean = false,
     /** Take its texts without asking. */
     val autoText: Boolean = false,
+    /** Put a text it pushes (a protocol v2 text on its own) on this device's clipboard. Off until the person turns it on. */
+    val autoClip: Boolean = false,
 )
 
 /** The paired devices, in a file the phone does not back up. Safe to use from any thread. */
@@ -96,9 +98,9 @@ class TrustStore(private val file: File) {
     }
 
     @Synchronized
-    fun setAuto(id: String, files: Boolean? = null, text: Boolean? = null) {
+    fun setAuto(id: String, files: Boolean? = null, text: Boolean? = null, clip: Boolean? = null) {
         val d = get(id) ?: return
-        val updated = d.copy(autoFiles = files ?: d.autoFiles, autoText = text ?: d.autoText)
+        val updated = d.copy(autoFiles = files ?: d.autoFiles, autoText = text ?: d.autoText, autoClip = clip ?: d.autoClip)
         devices = devices.map { if (it.id == id) updated else it }
         save()
     }
