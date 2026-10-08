@@ -37,6 +37,7 @@ import dev.khanlabs.lanshare.net.ShareDownload
 import dev.khanlabs.lanshare.net.ShareFile
 import dev.khanlabs.lanshare.net.ShareServer
 import dev.khanlabs.lanshare.net.fetchInfo
+import dev.khanlabs.lanshare.net.withoutLocation
 import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
 import dev.khanlabs.lanshare.protocol.V1
@@ -192,6 +193,8 @@ data class UiState(
     val haptics: Boolean = true,
     /** The Settings switch: start receiving when the phone starts (see [BootStart]). Off until the person turns it on. */
     val bootStart: Boolean = BootStart.DEFAULT,
+    /** The Settings switch: blank the location in JPEG photos as they are sent (see [StripGps]). Off until the person turns it on. */
+    val stripGps: Boolean = false,
     /** The Settings choice of turning receiving off by itself: never, hour or network (see [AutoOff]). */
     val autoOff: String = AutoOff.NEVER,
     /** Why receiving is off when it turned itself off, in words for the status card; empty once it is turned on again. */
@@ -799,7 +802,22 @@ object Engine : ReceiverEvents {
         return HeldFiles(result)
     }
 
-    fun send(device: Device, items: List<SendItem>, text: String) {
+    /** The Settings switch: blank the EXIF location in JPEG photos as they are sent or shared (see [StripGps]). Off until turned on. */
+    val stripGps: Boolean get() = prefs.getBoolean("strip_gps", false)
+
+    fun setStripGps(on: Boolean) {
+        prefs.edit().putBoolean("strip_gps", on).apply()
+        refresh()
+    }
+
+    /** [items] as they are, or with the location blanked in the JPEG photos when the switch is on. The length of each stays the same. */
+    private fun withoutLocationIfAsked(items: List<SendItem>): List<SendItem> =
+        if (stripGps) items.map { it.withoutLocation() } else items
+
+    fun send(device: Device, items: List<SendItem>, text: String) = start(device, withoutLocationIfAsked(items), text)
+
+    /** Begins a send of items that are ready as they are (the location, if asked for, is already blanked). */
+    private fun start(device: Device, items: List<SendItem>, text: String) {
         val key = keys.incrementAndGet()
         val job = SendJob(clients, me(), device, items, text) { refresh() }
         synchronized(lock) {
@@ -916,7 +934,7 @@ object Engine : ReceiverEvents {
         if (rest.isEmpty()) return
         val reached = job.sent > 0 || job.saved.isNotEmpty() || job.skipped > 0
         removeSend(key) // the files that did not get there stay open: the new send reads them
-        send(job.device, rest, if (reached) "" else job.text)
+        start(job.device, rest, if (reached) "" else job.text) // these are the items the first send made: already wrapped
     }
 
     fun dismissSend(key: Long) {
@@ -1162,7 +1180,7 @@ object Engine : ReceiverEvents {
                     else -> {
                         val pin = if (usePin) "%06d".format(SecureRandom().nextInt(1_000_000)) else null
                         val link = if (receiving) myCode()?.toText().orEmpty() else ""
-                        val s = ShareServer(items, pin, minutes, shareDownloads(), link, appLabel, onChange = ::refresh,
+                        val s = ShareServer(withoutLocationIfAsked(items), pin, minutes, shareDownloads(), link, appLabel, onChange = ::refresh,
                             stash = File(app.noBackupFilesDir, STASH_DIR))
                         try {
                             s.start()
@@ -1198,7 +1216,7 @@ object Engine : ReceiverEvents {
                     items.isEmpty() -> "Pick something to add first."
                     s == null || !s.live() -> "This share has ended. Start a new one."
                     else -> {
-                        s.addFiles(items)
+                        s.addFiles(withoutLocationIfAsked(items))
                         null
                     }
                 }
@@ -1313,6 +1331,7 @@ object Engine : ReceiverEvents {
                 allowVpn = allowVpn,
                 haptics = haptics,
                 bootStart = bootStart,
+                stripGps = stripGps,
                 autoOff = autoOff,
                 autoOffReason = if (receiving) "" else prefs.getString("rx_off_reason", null).orEmpty(),
                 folder = saveFolder,

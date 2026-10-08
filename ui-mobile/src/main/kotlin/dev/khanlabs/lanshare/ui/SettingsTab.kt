@@ -170,6 +170,12 @@ internal fun SettingsTab(
         item {
             Group("Privacy and data") {
                 SettingRow(
+                    "Remove location from photos",
+                    if (s.stripGps) "On. Where a JPEG photo was taken is blanked as it is sent or shared. The photo on this phone is not changed."
+                    else "Off. Photos are sent as they are, with the place they were taken if the camera saved it.",
+                ) { Switch(checked = s.stripGps, onCheckedChange = { Engine.setStripGps(it) }) }
+                Rule()
+                SettingRow(
                     "Clear activity",
                     if (s.history.isEmpty()) "Nothing kept" else "${s.history.size} items, kept on this phone only",
                     onClick = if (s.history.isEmpty()) null else onClearHistory,
