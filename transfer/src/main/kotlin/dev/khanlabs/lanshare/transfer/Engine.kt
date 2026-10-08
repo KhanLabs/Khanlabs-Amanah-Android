@@ -818,6 +818,8 @@ object Engine : ReceiverEvents {
                     })
                 }))
         }
+        // Activity keeps the record, with the same Open, Share and Copy: the card leaves Now by itself after a few seconds
+        if (NowList.incomingLeaves(offer.state)) main.postDelayed({ dismissIncoming(offer.id) }, NowList.STAYS_MS)
         refresh()
     }
 
@@ -1030,6 +1032,10 @@ object Engine : ReceiverEvents {
             if (job.state == SendJob.State.DONE || job.state == SendJob.State.DECLINED) job.releaseItems()
             record(job, begun)
             refresh()
+            // Activity has it now: the card leaves Now by itself, unless the person can still try the unsent files again
+            if (NowList.outgoingLeaves(job.state, job.unfinished().size)) {
+                main.postDelayed({ removeSend(key)?.releaseItems() }, NowList.STAYS_MS)
+            }
         }
     }
 
