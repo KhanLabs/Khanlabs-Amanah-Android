@@ -265,6 +265,8 @@ object Engine : ReceiverEvents {
 
     /** Where a share keeps private copies of files of unknown size while it runs. Emptied at every start. */
     private const val STASH_DIR = "share-stash"
+    /** Where protocol v2 keeps the parts and journals of the sends it receives (app-private, kept out of backups). */
+    private const val V2_DIR = "v2-sessions"
 
     fun init(context: Context, versionName: String, debug: Boolean) {
         if (isInitialized) return
@@ -499,7 +501,7 @@ object Engine : ReceiverEvents {
             if (receiver != null) return true
             try {
                 val rx = Receiver(identity, { ReceiverSettings(name, receiving) }, { Stores.current(app) }, this, appLabel,
-                    peeker = SocketPeek, messageTrusted = ::trustsMessage)
+                    peeker = SocketPeek, messageTrusted = ::trustsMessage, v2Dir = File(app.noBackupFilesDir, V2_DIR))
                 rx.start()
                 receiver = rx
                 listenError = null
@@ -524,13 +526,15 @@ object Engine : ReceiverEvents {
             discovery?.stopBrowsing()
         }
         io.execute { rx?.stop() }
+        // a v2 send that is still coming in is not over: it comes back when receiving starts again (see onResumed)
+        synchronized(lock) { offers.values.removeAll { it.isV2 && it.state == "accepted" } }
         refresh()
     }
 
     private fun announce() {
         val rx = receiver
         if (rx == null || !receiving) return
-        discovery?.announce(Announcement(identity.id, name, rx.port, appLabel))
+        discovery?.announce(Announcement(identity.id, name, rx.port, appLabel, protocols = listOf(1, 2)))
     }
 
     /** The Refresh button: looks for devices again, and asks each saved device whether it answers. */
@@ -618,6 +622,12 @@ object Engine : ReceiverEvents {
         refresh()
     }
 
+    /** A v2 send that was accepted and not finished comes back from its journal after a restart: shown again, with no prompt. */
+    override fun onResumed(offer: Offer) {
+        synchronized(lock) { offers[offer.id] = offer }
+        refresh()
+    }
+
     override fun onFile(offer: Offer, file: IncomingFile) = refresh()
 
     override fun onProgress(offer: Offer, file: IncomingFile) = refresh()
@@ -671,7 +681,7 @@ object Engine : ReceiverEvents {
         failed = o.files.count { it.state == "failed" },
         firstNames = o.files.take(3).map { it.name },
         created = o.created,
-        expiresAt = o.created + V1.OFFER_TIMEOUT_S * 1000,
+        expiresAt = o.created + o.timeoutMs,
         alreadyHere = o.already.size,
         alreadyBytes = o.already.sumOf { it.size },
         skipped = o.files.count { it.skipped },
@@ -819,7 +829,7 @@ object Engine : ReceiverEvents {
     /** Begins a send of items that are ready as they are (the location, if asked for, is already blanked). */
     private fun start(device: Device, items: List<SendItem>, text: String) {
         val key = keys.incrementAndGet()
-        val job = SendJob(clients, me(), device, items, text) { refresh() }
+        val job = SendJob(clients, me(), device, items, text, identity = identity) { refresh() }
         synchronized(lock) {
             jobs[key] = job
             previews[key] = Previews.of(items)

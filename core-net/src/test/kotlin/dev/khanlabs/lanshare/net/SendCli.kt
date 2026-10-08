@@ -8,6 +8,7 @@ import kotlin.system.exitProcess
  * Sends files and text with the Kotlin sender, for testing against another device (test code only):
  *     gradlew :core-net:sendTo -Pto=192.168.1.20:47820 -Pid=<device ID or "-"> -Pfiles="a.txt;photos" -Ptext="hi"
  * Folders keep their structure, like the Windows app. Prints the result; exits 1 unless the send is done.
+ * It sends with protocol v2 to a device that speaks it; set the environment variable KL_V1 to force v1 for a comparison.
  */
 fun main(args: Array<String>) {
     val (to, id) = args[0] to args[1].takeIf { it != "-" }
@@ -29,16 +30,21 @@ fun main(args: Array<String>) {
             }
         }
     }
-    val me = Me(Identity.create("cli").id, "Kotlin sender", "android", "Amanah Android test")
+    val identity = Identity.create("cli")
+    val me = Me(identity.id, "Kotlin sender", "android", "Amanah Android test")
+    val begun = System.nanoTime()
     var shown = ""
-    val job = SendJob(clients, me, device, items, text) { j ->
+    val job = SendJob(clients, me, device, items, text, identity = identity, allowV2 = System.getenv("KL_V1") == null) { j ->
         // every change of state or message, so a break and the new try show up; progress alone prints nothing
         val line = "${j.state} ${j.message}"
         if (line != shown) println(line)
         shown = line
     }
     job.run()
-    println("Saved: ${job.saved}")
-    println("Sent ${job.sent} of ${job.total} bytes")
+    val seconds = (System.nanoTime() - begun) / 1e9
+    println("Saved: ${job.saved.take(10)}${if (job.saved.size > 10) " and ${job.saved.size - 10} more" else ""}")
+    println("Sent ${job.sent} of ${job.total} bytes, ${job.verified} files verified, ${job.resumes} resumes")
+    println("%.1f s, %.1f MB/s, %.0f files/s, peak %.1f MB/s".format(seconds, job.sent / 1e6 / seconds,
+        items.size / seconds, job.peakSpeed / 1e6))
     exitProcess(if (job.state == SendJob.State.DONE) 0 else 1)
 }

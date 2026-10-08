@@ -65,6 +65,13 @@ class Offer(
     val skipOk: Boolean = false,
     val created: Long = System.currentTimeMillis(),
 ) {
+    /** How long the offer waits for the person's answer, in milliseconds: 2 minutes for v1, 10 for a v2 session. */
+    @Volatile var timeoutMs: Long = V1.OFFER_TIMEOUT_S * 1000
+        internal set
+
+    /** True for a protocol v2 session (it can resume after a break, and survives the receiver being stopped). */
+    val isV2: Boolean get() = v2 != null
+
     @Volatile var state: String = "waiting" // waiting, accepted, declined, expired, cancelled, done
         internal set
     @Volatile internal var lastSeen: Long = System.nanoTime()

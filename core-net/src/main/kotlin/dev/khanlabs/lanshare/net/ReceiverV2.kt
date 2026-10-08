@@ -209,6 +209,7 @@ internal class ReceiverV2(
         val s = SessionV2(offer, list, proven.id, V2.DEFAULT_CHUNK, summary, tokenFor(req.session, proven.id), dir)
         offer.v2 = s
         offer.declaredTotal = summary.bytes
+        offer.timeoutMs = pendingMs
         addEntries(s, req.files)
         if (!req.more) completeManifest(s)
         when (rx.registerOffer(offer)) {

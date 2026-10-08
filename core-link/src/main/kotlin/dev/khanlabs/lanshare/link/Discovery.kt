@@ -16,7 +16,11 @@ import java.net.InetAddress
 import java.net.NetworkInterface
 
 /** What this device announces (PROTOCOL.md section 2). */
-data class Announcement(val id: String, val name: String, val port: Int, val app: String, val model: String = "android")
+data class Announcement(
+    val id: String, val name: String, val port: Int, val app: String, val model: String = "android",
+    /** The protocol versions this device speaks: `v` is the highest and `vs` lists them all (PROTOCOL-v2.md section 2). */
+    val protocols: List<Int> = listOf(1),
+)
 
 /**
  * DNS-SD with NsdManager: announces this device and finds others offering `_klshare._tcp`.
@@ -59,7 +63,8 @@ class Discovery(
             setAttribute("id", a.id)
             setAttribute("name", a.name.take(63))
             setAttribute("model", a.model)
-            setAttribute("v", V1.PROTOCOL.toString())
+            setAttribute("v", (a.protocols.maxOrNull() ?: V1.PROTOCOL).toString())
+            if (a.protocols.size > 1) setAttribute("vs", a.protocols.sorted().joinToString(","))
             setAttribute("app", a.app)
             setAttribute("share", "")
         }
