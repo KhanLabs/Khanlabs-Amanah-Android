@@ -76,16 +76,16 @@ class SendItem(
 /** Who this device is, as it tells others in an offer. */
 data class Me(val id: String, val name: String, val model: String, val app: String)
 
-private val JSON = "application/json".toMediaType()
+internal val JSON = "application/json".toMediaType()
 
-private fun url(host: String, port: Int, path: String): String {
+internal fun url(host: String, port: Int, path: String): String {
     val h = if (':' in host) "[$host]" else host
     return "https://$h:$port${V1.API}$path"
 }
 
 private fun Response.bodyText(): String = body.string()
 
-private fun errorOf(text: String): ApiError? = try {
+internal fun errorOf(text: String): ApiError? = try {
     ProtocolJson.decodeFromString(ApiError.serializer(), text)
 } catch (e: Exception) {
     null
@@ -98,7 +98,11 @@ private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".form
  * [IdentityMismatchException]; without it, the ID comes from the certificate this connection used.
  */
 fun fetchInfo(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expectedId: String? = null,
-              timeoutS: Long = 5): Device {
+              timeoutS: Long = 5): Device = fetchInfoFull(clients, host, port, expectedId, timeoutS).first
+
+/** Like [fetchInfo], and also the whole answer: its `protocols` say whether the device does v2 as well. */
+fun fetchInfoFull(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expectedId: String? = null,
+                  timeoutS: Long = 5): Pair<Device, Info> {
     val client = clients.pinned(expectedId).newBuilder()
         .connectTimeout(timeoutS, TimeUnit.SECONDS).readTimeout(timeoutS, TimeUnit.SECONDS).build()
     client.newCall(Request.Builder().url(url(host, port, "/info")).build()).execute().use { r ->
@@ -109,7 +113,7 @@ fun fetchInfo(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expec
             null
         }
         if (info == null || info.id != id) throw SendException("That address doesn't answer like an Amanah device. Check the address.")
-        return Device(id, info.name.ifEmpty { host }, info.model, listOf(host), port, info.app)
+        return Device(id, info.name.ifEmpty { host }, info.model, listOf(host), port, info.app) to info
     }
 }
 
@@ -122,13 +126,17 @@ fun fetchInfo(clients: Clients, host: String, port: Int = V1.DEFAULT_PORT, expec
  * break"); the file starts over from its first byte.
  */
 class SendJob(
-    private val clients: Clients,
-    private val me: Me,
+    internal val clients: Clients,
+    internal val me: Me,
     val device: Device,
     val items: List<SendItem>,
     val text: String = "",
     /** "message" sends [text] as a chat text; the receiver may show it without asking. */
     private val kind: String = "",
+    /** This device's identity, to prove who is sending in protocol v2. Without it only v1 is used. */
+    internal val identity: Identity? = null,
+    /** False sends with v1 even to a device that does v2 (for tests, and for a device that misbehaves with v2). */
+    private val allowV2: Boolean = true,
     private val onUpdate: (SendJob) -> Unit = {},
 ) {
     enum class State { CONNECTING, WAITING, SENDING, DONE, DECLINED, FAILED, CANCELLED }
@@ -140,53 +148,66 @@ class SendJob(
         private set
     /** Bytes that will really be sent: files the receiver already has are taken off once it answers. */
     @Volatile var total: Long = items.sumOf { it.size }
-        private set
+        internal set
     @Volatile var sent = 0L
-        private set
+        internal set
     @Volatile var current = ""
-        private set
-    /** The names the receiver saved, in order. */
-    val saved = ArrayList<String>()
+        internal set
+    /** The names the receiver saved, in order. v2 sends from several threads, so the list is synchronized. */
+    val saved: MutableList<String> = Collections.synchronizedList(ArrayList())
     /** How many files were left out because the receiver already has them, and their size. */
     @Volatile var skipped = 0
-        private set
+        internal set
     @Volatile var skippedBytes = 0L
-        private set
+        internal set
     /** How many sent files the receiver confirmed with the same SHA-256 as the bytes that were read here. */
     @Volatile var verified = 0
-        private set
+        internal set
     /** The connection broke and the send is waiting to try again (state stays SENDING). */
     @Volatile var reconnecting = false
-        private set
+        internal set
     /** When the receiver said yes, in milliseconds since 1970. 0 until then. */
     @Volatile var acceptedAt = 0L
-        private set
+        internal set
     /** How many times the connection broke and the send tried again. */
     @Volatile var resumes = 0
-        private set
+        internal set
     /** The fastest speed seen over a few seconds, in bytes per second. */
     @Volatile var peakSpeed = 0.0
-        private set
+        internal set
     /** The address that answered. */
     @Volatile var host: String = device.hosts.firstOrNull() ?: ""
-        private set
+        internal set
     /** What stopped the send, for the error log. The message the person sees is [message]. */
     @Volatile var failure: Throwable? = null
-        private set
-    @Volatile private var fileFailure: Throwable? = null
-    @Volatile private var cancelled = false
+        internal set
+    @Volatile internal var fileFailure: Throwable? = null
+    @Volatile internal var cancelled = false
     @Volatile private var call: Call? = null
-    private val rate = Rate()
+    /** The protocol versions the device said it speaks in its v1 info. */
+    @Volatile internal var peerProtocols: List<Int> = emptyList()
+    /** Every request a v2 send has running, so Cancel can cut them all. */
+    internal val activeCalls: MutableSet<Call> = Collections.synchronizedSet(HashSet())
+    @Volatile internal var v2: V2Sender? = null
+    internal val rate = Rate()
     /** Positions in [items] that are done: sent, or left out as already there. */
-    private val finished: MutableSet<Int> = Collections.synchronizedSet(HashSet())
+    internal val finished: MutableSet<Int> = Collections.synchronizedSet(HashSet())
     /** Positions in [items] left out because the receiver already has them. */
-    private val alreadyThere: MutableSet<Int> = Collections.synchronizedSet(HashSet())
-    private val retrySignal = Semaphore(0)
+    internal val alreadyThere: MutableSet<Int> = Collections.synchronizedSet(HashSet())
+    /** Positions in [items] the receiver did not take (not chosen, too big for its disk, dropped). They are not sent again either. */
+    internal val leftOut: MutableSet<Int> = Collections.synchronizedSet(HashSet())
+    internal val retrySignal = Semaphore(0)
 
     val speed: Double get() = rate.speed()
 
     /** Feeds the speed meter after bytes went out, and keeps the best speed seen. */
-    private fun noteSent() {
+    /** Adds to the bytes sent; v2 sends from several threads. [n] is negative to take back bytes of a try that failed. */
+    @Synchronized
+    internal fun addSent(n: Long) {
+        sent += n
+    }
+
+    internal fun noteSent() {
         rate.add(sent)
         val now = rate.speed()
         if (now > peakSpeed) peakSpeed = now
@@ -194,9 +215,9 @@ class SendJob(
     val etaSeconds: Long? get() = rate.eta(sent, total)
 
     /** How many files are really being sent. */
-    private val fileCount: Int get() = items.size - skipped
+    internal val fileCount: Int get() = items.size - skipped
 
-    private fun update(state: State? = null, message: String? = null) {
+    internal fun update(state: State? = null, message: String? = null) {
         if (state != null) this.state = state
         if (message != null) this.message = message
         try {
@@ -216,6 +237,7 @@ class SendJob(
     fun results(): List<String> = items.indices.map { i ->
         when {
             i in alreadyThere -> ALREADY
+            i in leftOut -> UNSENT
             i in finished -> SENT
             else -> UNSENT
         }
@@ -238,9 +260,15 @@ class SendJob(
     fun cancel() {
         cancelled = true
         call?.cancel()
+        synchronized(activeCalls) { activeCalls.toList() }.forEach { it.cancel() }
         retrySignal.release()
         Thread {
             try {
+                val v2 = this.v2
+                if (v2 != null) {
+                    v2.cancelRemote()
+                    return@Thread
+                }
                 val body = ProtocolJson.encodeToString(CancelRequest.serializer(), CancelRequest(offerId)).toRequestBody(JSON)
                 clients.pinned(device.id).newCall(Request.Builder().url(url(host, device.port, "/cancel")).post(body).build())
                     .execute().close()
@@ -271,11 +299,12 @@ class SendJob(
     }
 
     /** The first address that answers with the right certificate. */
-    private fun pickHost() {
+    internal fun pickHost() {
         var last: Exception? = null
         for (h in device.hosts) {
             try {
-                fetchInfo(clients, h, device.port, device.id, timeoutS = if (device.hosts.size > 1) 4 else 10)
+                val (_, info) = fetchInfoFull(clients, h, device.port, device.id, timeoutS = if (device.hosts.size > 1) 4 else 10)
+                peerProtocols = info.protocols.orEmpty()
                 host = h
                 return
             } catch (e: Exception) {
@@ -290,6 +319,13 @@ class SendJob(
     private fun send() {
         pickHost()
         if (cancelled) return update(State.CANCELLED, "Cancelled")
+        // a device that does v2 is sent to with v2 (resume, checked files, fast small files); a text on its own stays on v1
+        if (allowV2 && identity != null && items.isNotEmpty() && 2 in peerProtocols) {
+            val sender = V2Sender(this, identity)
+            v2 = sender
+            if (sender.run()) return
+            v2 = null // the device does not answer on the v2 API after all: carry on with v1
+        }
         val files = items.mapIndexed { i, it -> OfferFile(i.toString(), it.name, it.size, (it.modified / 1000).takeIf { s -> s > 0 }) }
         val offer = OfferRequest(offerId, Sender(me.id, me.name, me.model, me.app), files, text, kind.ifEmpty { null },
             skipOk = true.takeIf { files.isNotEmpty() })
@@ -341,13 +377,13 @@ class SendJob(
         update(State.DONE, doneMessage())
     }
 
-    private fun doneMessage(): String {
+    internal fun doneMessage(): String {
         val n = saved.size
         if (skipped == 0) return "Sent $n file${if (n != 1) "s" else ""}"
         return "Sent $n new file${if (n != 1) "s" else ""}. ${if (skipped == 1) "1 was" else "$skipped were"} already on ${device.name}"
     }
 
-    private fun nothingNewMessage(): String =
+    internal fun nothingNewMessage(): String =
         "Nothing new to send. ${if (skipped == 1) "That file was" else "All $skipped files were"} already on ${device.name}"
 
     /**
@@ -437,7 +473,7 @@ class SendJob(
     }
 
     /** Waits [seconds], or less when the person taps "Try now" or cancels. */
-    private fun pause(seconds: Long) {
+    internal fun pause(seconds: Long) {
         retrySignal.drainPermits()
         reconnecting = true
         resumes++
