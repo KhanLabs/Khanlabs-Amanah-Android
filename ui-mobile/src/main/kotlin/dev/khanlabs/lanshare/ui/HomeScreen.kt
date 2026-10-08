@@ -161,7 +161,7 @@ fun HomeScreen(
     fun ready(p: Pending) {
         val d = dest
         dest = null
-        if (d != null) sendPending(context, scope, d, p) else pending = p
+        if (d != null) sendPending(context, scope, listOf(d), p) else pending = p
     }
 
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -238,7 +238,7 @@ fun HomeScreen(
                 if (shared.isEmpty) onShareDone() else pending = content
             }
             shared.isEmpty -> { chooseFor = device; onShareDone() }   // from the app icon's menu: what to send it?
-            else -> { sendPending(context, scope, device, content); onShareDone() }   // progress shows under Now on the Send tab
+            else -> { sendPending(context, scope, listOf(device), content); onShareDone() }   // progress shows under Now on the Send tab
         }
     }
     /** Add the device a code names, with its full ID pinned. A code that names a Wi-Fi network joins it first. */
@@ -411,8 +411,8 @@ fun HomeScreen(
     if (!s.conformance) s.incoming.lastOrNull { it.state == "waiting" }?.let { OfferSheet(it) }
 
     pending?.let { p ->
-        DevicePickerSheet(p.what, s, onPick = { d ->
-            sendPending(context, scope, d, p)
+        DevicePickerSheet(p.what, s, onPick = { picked ->
+            sendPending(context, scope, picked, p)
             closePending(sent = true)
         }, onScan = { scanOpen = true }, onAddByIp = { addOpen = true }, onHelp = { helpOpen = true }, onDismiss = { closePending() })
     }
@@ -523,7 +523,7 @@ private fun itemsText(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${n
 
 private fun toast(context: Context, text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
-private fun sendPending(context: Context, scope: CoroutineScope, device: Device, p: Pending) {
+private fun sendPending(context: Context, scope: CoroutineScope, devices: List<Device>, p: Pending) {
     scope.launch {
         val held = p.held
         val (fromUris, skipped) = when {
@@ -533,7 +533,7 @@ private fun sendPending(context: Context, scope: CoroutineScope, device: Device,
         }
         if (skipped > 0) toast(context, "$skipped item(s) couldn't be read and were left out")
         val all = fromUris + p.items
-        if (all.isNotEmpty() || p.text.isNotEmpty()) Engine.send(device, all, p.text)
+        if (all.isNotEmpty() || p.text.isNotEmpty()) Engine.send(devices, all, p.text)
     }
 }
 

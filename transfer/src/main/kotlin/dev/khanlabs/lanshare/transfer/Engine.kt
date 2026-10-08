@@ -975,6 +975,21 @@ object Engine : ReceiverEvents {
 
     fun send(device: Device, items: List<SendItem>, text: String) = start(device, withoutLocationIfAsked(items), text)
 
+    /**
+     * The same files (and text) to each of [devices]: one send per device, each with its own card and its own outcome.
+     * Every send gets its own copy of each item, so the file stays open until the last send is over.
+     */
+    fun send(devices: List<Device>, items: List<SendItem>, text: String) {
+        val ready = withoutLocationIfAsked(items)
+        val unique = devices.distinctBy { it.id }
+        if (unique.size <= 1) {
+            unique.firstOrNull()?.let { start(it, ready, text) }
+            return
+        }
+        val copies = ready.map { it.copies(unique.size) }
+        for ((n, d) in unique.withIndex()) start(d, copies.map { it[n] }, text)
+    }
+
     /** Begins a send of items that are ready as they are (the location, if asked for, is already blanked). */
     private fun start(device: Device, items: List<SendItem>, text: String) {
         val key = keys.incrementAndGet()

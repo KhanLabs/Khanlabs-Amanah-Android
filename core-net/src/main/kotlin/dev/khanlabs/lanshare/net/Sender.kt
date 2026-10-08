@@ -71,6 +71,16 @@ class SendItem(
             // already closed
         }
     }
+
+    /**
+     * [n] items for the same file, one for each send that reads it (a send to several devices). This item is released when
+     * the last copy is, so the first send to finish can't close the file under the others.
+     */
+    fun copies(n: Int): List<SendItem> {
+        require(n >= 1) { "at least one copy" }
+        val left = java.util.concurrent.atomic.AtomicInteger(n)
+        return List(n) { SendItem(name, size, modified, preview, onRelease = { if (left.decrementAndGet() == 0) release() }, open = open) }
+    }
 }
 
 /** Who this device is, as it tells others in an offer. */

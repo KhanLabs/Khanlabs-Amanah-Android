@@ -250,19 +250,37 @@ private fun ChooseFilesScreen(files: List<ChoiceFile>, initial: Set<String>?, on
 
 // --- sending
 
-/** Content is picked; now pick the device to send it to. */
+/**
+ * Content is picked; now pick the device to send it to. A tap on a device sends at once. **Choose several** turns the rows
+ * into boxes, and one button sends the same content to every device ticked (each send gets its own card).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DevicePickerSheet(
-    what: String, s: UiState, onPick: (Device) -> Unit, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit,
+    what: String, s: UiState, onPick: (List<Device>) -> Unit, onScan: () -> Unit, onAddByIp: () -> Unit, onHelp: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val devices = s.active
     val inactive = if (s.showInactive) s.inactive else emptyList()
-    Sheet(onDismiss) {
+    val everyone = devices + inactive
+    var several by remember { mutableStateOf(false) }
+    var ticked by remember { mutableStateOf(emptySet<String>()) }
+    val count = everyone.count { it.id in ticked }
+    Sheet(onDismiss, footer = {
+        if (several) {
+            Button(onClick = { onPick(everyone.filter { it.id in ticked }) }, enabled = count > 0, modifier = Modifier.fillMaxWidth()) {
+                Text(if (count == 1) "Send to 1 device" else "Send to $count devices")
+            }
+        }
+    }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Send $what to", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             IconButton(onClick = { Engine.refreshNearby() }) { Glyph(Icons.Refresh, description = "Refresh") }
+        }
+        if (everyone.size > 1) {
+            TextButton(onClick = { several = !several; ticked = emptySet() }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text(if (several) "Send to one device" else "Choose several")
+            }
         }
         Spacer(Modifier.height(8.dp))
         if (devices.isEmpty()) {
@@ -274,8 +292,28 @@ internal fun DevicePickerSheet(
                 TextButton(onClick = onHelp) { Text("Not showing up?") }
             }
         }
-        for (d in devices) ActionRow(deviceIcon(d.model), d.name, d.kind()) { onPick(d) }
-        for (d in inactive) ActionRow(deviceIcon(d.model), d.name, "Not nearby  ·  ${d.kind()}") { onPick(d) }
+        val tap = { d: Device ->
+            if (several) ticked = if (d.id in ticked) ticked - d.id else ticked + d.id else onPick(listOf(d))
+        }
+        for (d in devices) PickRow(d, d.kind(), several, d.id in ticked) { tap(d) }
+        for (d in inactive) PickRow(d, "Not nearby  ·  ${d.kind()}", several, d.id in ticked) { tap(d) }
+    }
+}
+
+/** A device in the picker: a plain row, or one with a box while several can be ticked. */
+@Composable
+private fun PickRow(d: Device, subtitle: String, selecting: Boolean, ticked: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(deviceIcon(d.model), MaterialTheme.colorScheme.primary, 26)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(d.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Muted(subtitle)
+        }
+        if (selecting) Checkbox(checked = ticked, onCheckedChange = null)
     }
 }
 

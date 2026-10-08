@@ -325,6 +325,49 @@ class V2SenderTest {
         t2.join(30_000)
     }
 
+    // --- the same files to several devices
+
+    @Test
+    fun copiesOfAnItemAreEachReadableAndTheFileIsReleasedAfterTheLastOne() {
+        val data = bytes(5000, seed = 21)
+        val released = java.util.concurrent.atomic.AtomicInteger()
+        val original = SendItem("shared.bin", data.size.toLong(), 1_700_000_000_000, "content://x", onRelease = { released.incrementAndGet() }) { ByteArrayInputStream(data) }
+        val (a, b, c) = original.copies(3)
+        for (copy in listOf(a, b, c)) {
+            assertEquals("shared.bin", copy.name)
+            assertEquals(data.size.toLong(), copy.size)
+            assertEquals("content://x", copy.preview)
+            assertContentEquals(data, copy.open().readBytes())
+        }
+        a.release(); a.release() // twice counts once
+        b.release()
+        assertEquals(0, released.get(), "one copy is still in use")
+        c.release()
+        assertEquals(1, released.get())
+        original.release()
+        assertEquals(1, released.get(), "released once however often it is asked")
+    }
+
+    @Test
+    fun theSameFileSentTwiceFromCopiesStaysReadableUntilTheSecondSendEnds() {
+        val data = bytes(40_000, seed = 22)
+        val released = java.util.concurrent.atomic.AtomicInteger()
+        val original = SendItem("shared.bin", data.size.toLong(), 0, null, onRelease = { released.incrementAndGet() }) { ByteArrayInputStream(data) }
+        val (a, b) = original.copies(2)
+        val first = job(a)
+        first.run()
+        first.releaseItems() // the first send is over and lets its copy go
+        assertEquals(SendJob.State.DONE, first.state, first.message)
+        assertEquals(0, released.get(), "the second send has not read the file yet")
+        val second = job(b, name = "Second")
+        second.run()
+        second.releaseItems()
+        assertEquals(SendJob.State.DONE, second.state, second.message)
+        assertEquals(1, released.get(), "both sends are over")
+        assertContentEquals(data, saved("shared.bin").readBytes())
+        assertContentEquals(data, saved("shared (1).bin").readBytes())
+    }
+
     // --- a break in the middle
 
     @Test
