@@ -332,6 +332,19 @@ class ReceiverV2Test {
     }
 
     @Test
+    fun filesInAPageThatComesAfterTheChoiceAreNotChosenAndTheSessionStillEnds() {
+        answers.chooser = { setOf("0") }
+        val sid = sid()
+        val all = (0 until 3).map { entry("$it", "dir/f$it.txt", 10) }
+        val token = c.create(sid, all.take(1), more = true, summary = Summary(3, 30)).text("token")!!
+        waitFor(token, sid) { it.text("state") == "accepted" }
+        assertEquals(200, c.manifest(token, sid, all.drop(1), more = false).code)
+        assertEquals("not_wanted", c.putChunk(token, sid, "1", 0, bytes(10)).error)
+        assertEquals(200, c.sendFile(token, sid, "0", bytes(10)).code)
+        waitFor(token, sid) { it.text("state") == "done" }
+    }
+
+    @Test
     fun aListThatDoesNotAddUpToItsSummaryCancelsTheSession() {
         val sid = sid()
         val r = c.create(sid, listOf(entry("0", "a.txt", 10)), more = true, summary = Summary(3, 30))

@@ -299,6 +299,7 @@ internal class ReceiverV2(
             } else {
                 val f = IncomingFile(e.id, safe, e.size, e.mtime?.takeIf { it > 0 }?.div(1000)?.takeIf { it > 0 })
                 f.mtimeMs = e.mtime?.takeIf { it > 0 }
+                if (!s.wantedFile(f)) f.skipped = true // a page that comes after the person chose: this file was not chosen
                 s.files[e.id] = f
                 added += f
             }

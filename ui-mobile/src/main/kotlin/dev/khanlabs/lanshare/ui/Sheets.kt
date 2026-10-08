@@ -9,10 +9,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -27,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,12 +49,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import dev.khanlabs.lanshare.net.Device
 import dev.khanlabs.lanshare.store.Stores
+import dev.khanlabs.lanshare.transfer.Choice
+import dev.khanlabs.lanshare.transfer.ChoiceFile
 import dev.khanlabs.lanshare.transfer.Engine
+import dev.khanlabs.lanshare.transfer.Format
 import dev.khanlabs.lanshare.transfer.IncomingView
 import dev.khanlabs.lanshare.transfer.UiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * A bottom sheet. The "Made with love by Khan" line sits at its foot, so it stays in view on every screen.
@@ -113,8 +125,15 @@ internal fun OfferSheet(v: IncomingView) {
     var whyOpen by remember { mutableStateOf(false) }
     // on by default: files already here are left out unless the person turns this off
     var skip by remember(v.id) { mutableStateOf(true) }
-    val newCount = v.fileCount - if (skip) v.alreadyHere else 0
-    val newBytes = v.total - if (skip) v.alreadyBytes else 0
+    // the IDs of the files the person picked with "Choose files"; null takes them all
+    var chosen by remember(v.id) { mutableStateOf<Set<String>?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    val list by produceState(emptyList<ChoiceFile>(), v.id, v.canChoose) {
+        value = if (v.canChoose) withContext(Dispatchers.Default) { Engine.offerFiles(v.id) } else emptyList()
+    }
+    val picked = if (chosen != null && list.isNotEmpty()) Choice.totals(list, chosen, skip) else null
+    val newCount = picked?.count ?: (v.fileCount - if (skip) v.alreadyHere else 0)
+    val newBytes = picked?.bytes ?: (v.total - if (skip) v.alreadyBytes else 0)
     Sheet(onDismiss = {}, locked = true, footer = {
         Muted("Answer within ${clock(left)}")
         LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 16.dp))
@@ -123,7 +142,7 @@ internal fun OfferSheet(v: IncomingView) {
             OutlinedButton(onClick = { Engine.answer(v.id, false) }, Modifier.weight(1f), contentPadding = tight) {
                 Text("Decline", maxLines = 1, softWrap = false)
             }
-            Button(onClick = { Engine.answer(v.id, true, skip) }, Modifier.weight(1f), contentPadding = tight) {
+            Button(onClick = { Engine.answer(v.id, true, skip, Choice.wantedFor(list, chosen)) }, Modifier.weight(1f), contentPadding = tight) {
                 Text("Accept", maxLines = 1, softWrap = false)
             }
         }
@@ -140,6 +159,12 @@ internal fun OfferSheet(v: IncomingView) {
                         style = MaterialTheme.typography.bodyLarge)
                     Muted("Same name and size as files in ${Engine.state.value.folder}. Turn off to get a second copy.")
                 }
+            }
+        }
+        if (v.canChoose && list.size > 1) {
+            val ticked = if (chosen == null) list.size else Choice.totals(list, chosen, skip = false).count
+            TextButton(onClick = { picking = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text(if (chosen == null) "Choose files" else "Choose files ($ticked of ${list.size})")
             }
         }
         if (v.fileCount > 0) {
@@ -165,6 +190,60 @@ internal fun OfferSheet(v: IncomingView) {
         }
         if (whyOpen) {
             Muted("From ${v.ip}. Anyone on this Wi-Fi can send an offer under any name, so accept only what you expect.")
+        }
+    }
+    if (picking) {
+        ChooseFilesScreen(list, chosen, onDone = { chosen = it; picking = false }, onCancel = { picking = false })
+    }
+}
+
+/** Full screen list of an incoming send's files, each with a box. Done gives the ticked IDs, or null when all are ticked. */
+@Composable
+private fun ChooseFilesScreen(files: List<ChoiceFile>, initial: Set<String>?, onDone: (Set<String>?) -> Unit, onCancel: () -> Unit) {
+    var ticked by remember { mutableStateOf(initial ?: files.mapTo(HashSet(files.size * 2)) { it.id }) }
+    val totals = remember(ticked) { Choice.totals(files, ticked, skip = false) }
+    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onCancel) { Glyph(Icons.Back, MaterialTheme.colorScheme.onBackground, description = "Close") }
+                    Text("Choose files", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { ticked = files.mapTo(HashSet(files.size * 2)) { it.id } }) { Text("All") }
+                    TextButton(onClick = { ticked = emptySet() }) { Text("None") }
+                }
+                Muted(
+                    if (totals.count == 0) "Nothing ticked" else "${countText(totals.count, totals.bytes)} ticked",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+                LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+                    items(files, key = { it.id }) { f ->
+                        val on = f.id in ticked
+                        Row(
+                            Modifier.fillMaxWidth().clickable { ticked = if (on) ticked - f.id else ticked + f.id }
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = on, onCheckedChange = { ticked = if (it) ticked + f.id else ticked - f.id })
+                            Column(Modifier.weight(1f)) {
+                                Text(f.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Muted(Format.size(f.size) + if (f.alreadyHere) "  ·  already here" else "")
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val tight = PaddingValues(horizontal = 8.dp, vertical = 12.dp)
+                    OutlinedButton(onClick = onCancel, Modifier.weight(1f), contentPadding = tight) { Text("Cancel", maxLines = 1, softWrap = false) }
+                    Button(
+                        onClick = { onDone(if (totals.count == files.size) null else ticked) },
+                        Modifier.weight(1f), enabled = totals.count > 0, contentPadding = tight,
+                    ) {
+                        Text(if (totals.count == files.size) "Take all" else "Take ${totals.count}", maxLines = 1, softWrap = false)
+                    }
+                }
+                MadeWithBar()
+            }
         }
     }
 }

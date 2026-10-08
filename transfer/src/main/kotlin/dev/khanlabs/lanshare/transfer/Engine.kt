@@ -93,6 +93,8 @@ data class IncomingView(
     val alreadyBytes: Long = 0,
     /** Files left out because the person kept "skip" on. */
     val skipped: Int = 0,
+    /** The person can pick which files to take ([Engine.offerFiles] has the list). */
+    val canChoose: Boolean = false,
 )
 
 /** One outgoing send, as the screens show it. */
@@ -728,10 +730,17 @@ object Engine : ReceiverEvents {
     /**
      * The person's answer to an incoming send. [skip] leaves out the files already here; it is on by default, like the
      * checkbox on the offer, so Accept in the notification does the same as Accept on the sheet.
+     * [wanted] is the IDs of the files the person picked ([Choice.wantedFor]); null takes them all.
      */
-    fun answer(offerId: String, accept: Boolean, skip: Boolean = true) {
-        io.execute { receiver?.answer(offerId, accept, skip) }
+    fun answer(offerId: String, accept: Boolean, skip: Boolean = true, wanted: Set<String>? = null) {
+        io.execute { receiver?.answer(offerId, accept, skip, wanted) }
         Notifications.cancelOffer(app, offerId)
+    }
+
+    /** The files of an incoming send, for the "Choose files" list. Empty when the offer is gone. */
+    fun offerFiles(offerId: String): List<ChoiceFile> {
+        val o = synchronized(lock) { offers[offerId] } ?: return emptyList()
+        return o.files.map { ChoiceFile(it.id, it.name, it.size, it.alreadyHere) }
     }
 
     fun cancelIncoming(offerId: String) {
@@ -824,6 +833,7 @@ object Engine : ReceiverEvents {
         alreadyHere = o.already.size,
         alreadyBytes = o.already.sumOf { it.size },
         skipped = o.files.count { it.skipped },
+        canChoose = o.canChoose,
     )
 
     // --- messages

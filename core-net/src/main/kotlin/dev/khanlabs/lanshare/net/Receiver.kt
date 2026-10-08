@@ -86,6 +86,12 @@ class Offer(
     /** v2: the size of the whole list as the sender summed it, known before the later pages of the list have arrived. -1 for v1. */
     @Volatile internal var declaredTotal: Long = -1
 
+    /**
+     * The person can pick which files to take: a v2 session, still waiting, whose whole list has arrived (a pick made
+     * before the last page would have to guess about files not seen yet).
+     */
+    val canChoose: Boolean get() = state == "waiting" && v2?.manifestComplete == true && files.size > 1
+
     /** What will really be sent: files left out as "already here" don't count. */
     val total: Long
         get() = if (declaredTotal >= 0) maxOf(0L, declaredTotal - files.sumOf { if (it.skipped) it.size else 0L })
@@ -194,10 +200,11 @@ class Receiver(
     /**
      * Called by the app when the person answers. Accepting hands out one upload token per file. With [skip], files
      * found already here ([Offer.already]) get no token and are reported back as done, if the sender asked for that.
+     * [wanted] (v2 only) is the IDs of the files the person chose; null takes them all. A v1 offer has no such choice.
      */
-    fun answer(offerId: String, accept: Boolean, skip: Boolean = false): Boolean {
+    fun answer(offerId: String, accept: Boolean, skip: Boolean = false, wanted: Set<String>? = null): Boolean {
         val offer = get(offerId) ?: return false
-        offer.v2?.let { return v2?.answer(offer, it, accept, skip) ?: false }
+        offer.v2?.let { return v2?.answer(offer, it, accept, skip, wanted) ?: false }
         synchronized(offer) {
             if (offer.state != "waiting") return false
             if (accept) {

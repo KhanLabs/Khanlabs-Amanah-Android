@@ -18,6 +18,9 @@ class ConformanceAnswers : ReceiverEvents {
     /** Every offer the person would have been asked about. */
     val asked = java.util.concurrent.LinkedBlockingQueue<Offer>()
 
+    /** Picks the file IDs to take from an offer, like the person choosing files; null (the default) takes them all. */
+    @Volatile var chooser: ((Offer) -> Set<String>?)? = null
+
     override fun onMessage(offer: Offer) {
         messages.add(offer)
     }
@@ -28,7 +31,7 @@ class ConformanceAnswers : ReceiverEvents {
         if ("[wait]" in name) return
         val accept = "[decline]" !in name
         val skip = "[skip]" in name
-        Thread { receiver.answer(offer.id, accept, skip) }.apply { isDaemon = true }.start()
+        Thread { receiver.answer(offer.id, accept, skip, chooser?.invoke(offer)) }.apply { isDaemon = true }.start()
     }
 
     override fun onFinished(offer: Offer) {

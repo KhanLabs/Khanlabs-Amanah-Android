@@ -240,6 +240,91 @@ class V2SenderTest {
         assertTrue(all.message.startsWith("Nothing new"), all.message)
     }
 
+    // --- the person chooses which files to take
+
+    private fun chooseByName(vararg names: String) = { offer: Offer -> offer.files.filter { it.name in names }.map { it.id }.toSet() }
+
+    @Test
+    fun onlyTheChosenFilesAreSentAndTheOthersAreLeftOutAndSaidSo() {
+        val big = bytes(20 * 1024 * 1024, seed = 11)
+        val keep = bytes(300, seed = 12)
+        answers.chooser = chooseByName("big.bin", "keep.txt")
+        val j = job(item("a.txt", bytes(100, 1)), item("big.bin", big), item("keep.txt", keep), item("z/d.txt", bytes(200, 2)))
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        assertContentEquals(big, saved("big.bin").readBytes())
+        assertContentEquals(keep, saved("keep.txt").readBytes())
+        assertFalse(saved("a.txt").exists(), "not chosen")
+        assertFalse(saved("z/d.txt").exists(), "not chosen")
+        assertEquals(2, j.verified)
+        assertEquals(big.size + keep.size.toLong(), j.total, "what was left out does not count")
+        assertEquals(j.total, j.sent)
+        assertEquals(listOf(SendJob.UNSENT, SendJob.SENT, SendJob.SENT, SendJob.UNSENT), j.results())
+        assertTrue("2 left out" in j.message, j.message)
+        val offer = rx.get(j.offerId)!!
+        assertEquals("done", offer.state)
+        assertEquals(big.size + keep.size.toLong(), offer.total)
+    }
+
+    @Test
+    fun choosingNoFilesAtAllSendsNothingAndTheSendStillEnds() {
+        answers.chooser = { emptySet() }
+        val j = job(item("a.txt", bytes(100, 1)), item("b.txt", bytes(200, 2)))
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        assertFalse(saved("a.txt").exists())
+        assertFalse(saved("b.txt").exists())
+        assertEquals(0, j.verified)
+        assertEquals(listOf(SendJob.UNSENT, SendJob.UNSENT), j.results())
+        assertEquals("done", rx.get(j.offerId)!!.state)
+    }
+
+    @Test
+    fun aFileThatWasNotChosenIsMarkedLeftOutOnTheOffer() {
+        val offerSeen = java.util.concurrent.atomic.AtomicReference<Offer?>()
+        answers.chooser = { o -> offerSeen.set(o); o.files.filter { it.name == "yes.txt" }.map { it.id }.toSet() }
+        val j = job(item("no.txt", bytes(10, 1)), item("yes.txt", bytes(10, 2)))
+        j.run()
+        assertEquals(SendJob.State.DONE, j.state, j.message)
+        val o = offerSeen.get()!!
+        assertTrue(o.files.first { it.name == "no.txt" }.skipped)
+        assertFalse(o.files.first { it.name == "yes.txt" }.skipped)
+        assertFalse(saved("no.txt").exists())
+        assertTrue(saved("yes.txt").isFile)
+    }
+
+    @Test
+    fun anOfferCanBeChosenFromOnlyWhenItIsV2WithItsWholeListHere() {
+        val v2 = job(item("a.txt", bytes(10, 1)), item("b.txt", bytes(10, 2)), name = "X [wait]")
+        val t = Thread { v2.run() }.apply { isDaemon = true; start() }
+        waitUntil { answers.asked.isNotEmpty() }
+        val offer = answers.asked.peek()!!
+        assertTrue(offer.canChoose, "v2, waiting, whole list here")
+        assertTrue(rx.answer(offer.id, true, false, offer.files.filter { it.name == "b.txt" }.map { it.id }.toSet()))
+        t.join(30_000)
+        assertFalse(t.isAlive)
+        assertEquals(SendJob.State.DONE, v2.state, v2.message)
+        assertFalse(offer.canChoose, "answered")
+        assertTrue(saved("b.txt").isFile)
+        assertFalse(saved("a.txt").exists())
+
+        val one = job(item("only.txt", bytes(10, 3)), name = "Y [wait]")
+        val t1 = Thread { one.run() }.apply { isDaemon = true; start() }
+        waitUntil { answers.asked.size >= 2 }
+        val single = answers.asked.toList()[1]
+        assertFalse(single.canChoose, "one file: nothing to choose")
+        rx.answer(single.id, false)
+        t1.join(30_000)
+
+        val v1 = job(item("c.txt", bytes(10, 4)), item("d.txt", bytes(10, 5)), name = "Z [wait]", allowV2 = false)
+        val t2 = Thread { v1.run() }.apply { isDaemon = true; start() }
+        waitUntil { answers.asked.size >= 3 }
+        val old = answers.asked.toList()[2]
+        assertFalse(old.canChoose, "v1 has no choice")
+        rx.answer(old.id, false)
+        t2.join(30_000)
+    }
+
     // --- a break in the middle
 
     @Test
