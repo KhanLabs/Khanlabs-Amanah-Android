@@ -252,6 +252,8 @@ internal fun IncomingCard(v: IncomingView) {
                 Progress(v.received, v.total)
                 Muted("${Format.size(v.received)} of ${Format.size(v.total)}")
             }
+            // pictures of the photos and videos that have already arrived, even while the rest is still coming
+            if (v.state == "accepted" || v.state == "done" || v.state == "cancelled") Thumbnails(v.saved)
             if (v.state != "accepted") for (name in v.saved.take(3)) {
                 Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp))
@@ -321,6 +323,11 @@ internal fun OutgoingCard(v: OutgoingView) {
                     Text("To ${v.deviceName}", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Muted("${whatText(v.fileCount - v.skipped, v.total, v.skipped)}  ·  ${v.message.ifEmpty { "Connecting" }}")
                 }
+            }
+            SentThumbnails(v.previews)
+            if (v.text.isNotEmpty()) {
+                Text(v.text, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 8.dp))
             }
             if (v.state == SendJob.State.DONE && v.verified > 0) {
                 Muted(if (v.verified >= v.savedCount) "Verified: every file arrived whole" else "Verified ${v.verified} of ${v.savedCount} files")

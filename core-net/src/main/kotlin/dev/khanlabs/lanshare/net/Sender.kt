@@ -49,12 +49,14 @@ private class StillReceiving : IOException("the receiver is still busy with an e
 
 /**
  * One thing to send: its name on the other side (already Windows-safe) and its bytes. [modified] is in milliseconds, 0 if unknown.
+ * [preview] is the address (as text) the screen can draw a small picture from while the file is sent, or null.
  * [onRelease] closes whatever is held open for the file (see Items.fromUris); [release] runs it once, however often it is called.
  */
 class SendItem(
     val name: String,
     val size: Long,
     val modified: Long = 0L,
+    val preview: String? = null,
     private val onRelease: () -> Unit = {},
     val open: () -> InputStream,
 ) {

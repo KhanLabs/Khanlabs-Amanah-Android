@@ -67,11 +67,11 @@ object Items {
             val base = safe
             while (!used.add(safe.lowercase())) safe = Names.numbered(base, n++) // two picks with one name
             if (pfd == null) {
-                items += SendItem(safe, size, modified(context, uri)) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
+                items += SendItem(safe, size, modified(context, uri), uri.toString()) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $safe") }
             } else {
                 held++
                 val file = pfd
-                items += SendItem(safe, size, modified(context, uri), onRelease = { file.close() }) {
+                items += SendItem(safe, size, modified(context, uri), uri.toString(), onRelease = { file.close() }) {
                     // a copy of the descriptor shares the file position, so every try starts again from the first byte
                     val stream = ParcelFileDescriptor.AutoCloseInputStream(file.dup())
                     try {
@@ -169,7 +169,7 @@ object Items {
                         if (items.size >= V1.MAX_FILES) return Tree(base, emptyList(), skipped, tooMany = true)
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
                         val changed = if (c.isNull(4)) 0L else c.getLong(4).coerceAtLeast(0L)
-                        items += SendItem(path, size, changed) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $path") }
+                        items += SendItem(path, size, changed, uri.toString()) { resolver.openInputStream(uri) ?: throw IOException("Couldn't open $path") }
                     }
                 }
             } catch (e: Exception) {

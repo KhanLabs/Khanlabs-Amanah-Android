@@ -109,6 +109,8 @@ data class OutgoingView(
     val reconnecting: Boolean = false,
     /** Files that did not get across and are not already there: what "Send the rest" would send. */
     val unsent: Int = 0,
+    /** Addresses (as text) to draw small pictures from: the first photos and videos of the send (see [Previews]). */
+    val previews: List<String> = emptyList(),
 )
 
 /** The share to someone without Amanah, as the screens show it. Null in [UiState.share] when none is set up. */
@@ -234,6 +236,8 @@ object Engine : ReceiverEvents {
     private val added = ArrayList<Device>()
     private val offers = LinkedHashMap<String, Offer>()
     private val jobs = LinkedHashMap<Long, SendJob>()
+    /** The pictures to show on each send's card, by the same key as [jobs]. */
+    private val previews = HashMap<Long, List<String>>()
     private var addresses: List<String> = emptyList()
     private var conformance = false
     private var wakeLock: PowerManager.WakeLock? = null
@@ -798,7 +802,10 @@ object Engine : ReceiverEvents {
     fun send(device: Device, items: List<SendItem>, text: String) {
         val key = keys.incrementAndGet()
         val job = SendJob(clients, me(), device, items, text) { refresh() }
-        synchronized(lock) { jobs[key] = job }
+        synchronized(lock) {
+            jobs[key] = job
+            previews[key] = Previews.of(items)
+        }
         refresh()
         keepAliveForSend()
         io.execute {
@@ -917,7 +924,10 @@ object Engine : ReceiverEvents {
     }
 
     private fun removeSend(key: Long): SendJob? {
-        val job = synchronized(lock) { jobs.remove(key) }
+        val job = synchronized(lock) {
+            previews.remove(key)
+            jobs.remove(key)
+        }
         refresh()
         return job
     }
@@ -1292,7 +1302,7 @@ object Engine : ReceiverEvents {
                 outgoing = jobs.entries.reversed().map { (k, j) ->
                     OutgoingView(k, j.device.name, j.state, j.message, j.items.size, j.sent, j.total, j.speed,
                         j.etaSeconds, j.current, j.text, j.skipped, j.saved.size, j.verified, j.reconnecting,
-                        j.unfinished().size)
+                        j.unfinished().size, previews[k].orEmpty())
                 },
                 conformanceAllowed = debugBuild,
                 conformance = conformance,
