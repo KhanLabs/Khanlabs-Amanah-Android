@@ -2,6 +2,7 @@ package dev.khanlabs.lanshare.net
 
 import dev.khanlabs.lanshare.protocol.ConnectCode
 import dev.khanlabs.lanshare.protocol.DeviceId
+import okhttp3.ConnectionPool
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import java.io.IOException
@@ -54,11 +55,22 @@ class Clients(private val base: OkHttpClient = OkHttpClient(), private val allow
         chain.proceed(chain.request())
     }
 
-    /** Never retries on its own: an offer sent twice would be refused as a duplicate. */
-    fun pinned(expectedId: String?): OkHttpClient = cache.getOrPut(expectedId ?: "") {
+    /** Never retries on its own: an offer sent twice would be refused as a duplicate. One request per connection (protocol v1). */
+    fun pinned(expectedId: String?): OkHttpClient = cache.getOrPut(expectedId ?: "") { build(expectedId, keepAlive = false) }
+
+    /**
+     * For protocol v2: connections are kept and used again (PROTOCOL-v2.md section 1.1), so many small requests don't
+     * each pay for a TLS handshake. The device ID is checked when a connection is made, as the spec says, and
+     * [PEER_ID] still says which certificate each answer came over. Never retries on its own either.
+     */
+    fun pinnedV2(expectedId: String?): OkHttpClient = cacheV2.getOrPut(expectedId ?: "") { build(expectedId, keepAlive = true) }
+
+    private val cacheV2 = ConcurrentHashMap<String, OkHttpClient>()
+
+    private fun build(expectedId: String?, keepAlive: Boolean): OkHttpClient {
         val trust = PinningTrustManager(expectedId)
         val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), SecureRandom()) }
-        base.newBuilder()
+        val builder = base.newBuilder()
             .sslSocketFactory(tls.socketFactory, trust)
             .hostnameVerifier { _, _ -> true } // the pin above replaces the host name check
             .retryOnConnectionFailure(false)
@@ -67,9 +79,9 @@ class Clients(private val base: OkHttpClient = OkHttpClient(), private val allow
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(onlyLocal)
-            .addInterceptor(oneRequestPerConnection)
-            .addNetworkInterceptor(peerId)
-            .build()
+        if (keepAlive) builder.connectionPool(ConnectionPool(8, 50, TimeUnit.SECONDS)) // the receiver drops a connection idle for 60 s
+        else builder.addInterceptor(oneRequestPerConnection)
+        return builder.addNetworkInterceptor(peerId).build()
     }
 
     companion object {

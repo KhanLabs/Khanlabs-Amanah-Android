@@ -2,6 +2,7 @@ package dev.khanlabs.lanshare.net
 
 import dev.khanlabs.lanshare.protocol.ApiError
 import dev.khanlabs.lanshare.protocol.ProtocolJson
+import dev.khanlabs.lanshare.protocol.V2
 import kotlinx.serialization.KSerializer
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -25,7 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 
-/** One request and its answer. Each connection carries one request, like the Windows app (HTTP/1.0 style). */
+/**
+ * One request and its answer. A connection carries one request, like the Windows app (HTTP/1.0 style), except for the
+ * protocol v2 paths, where [keepAlive] lets the connection be used again (PROTOCOL-v2.md section 1.1).
+ */
 class Exchange internal constructor(
     val method: String,
     val path: String,
@@ -36,10 +40,16 @@ class Exchange internal constructor(
     /** The body, limited to Content-Length bytes. */
     val body: InputStream,
     private val out: OutputStream,
+    /** The connection stays open for the next request after this answer. Only for the v2 API, and only when the client allows it. */
+    internal val keepAlive: Boolean = false,
 ) {
     /** Set once the body has been read, or is being streamed and can't be skipped any more. */
     var bodyRead = false
     var answered = false
+        private set
+
+    /** The connection was dropped without an answer ([hangUp]), so it can't be used again. */
+    internal var hungUp = false
         private set
 
     /** Closes the connection under a running answer. Set by the server that made this exchange. */
@@ -53,6 +63,25 @@ class Exchange internal constructor(
     fun hangUp() {
         answered = true
         bodyRead = true
+        hungUp = true
+    }
+
+    /**
+     * After the answer: is the connection clean for the next request? A body that is only partly read is read to its
+     * end when what is left is up to [limit] (PROTOCOL-v2.md section 7: always read the whole body, so the sender gets
+     * the reply), else the connection must close, because the next request would start in the middle of it.
+     */
+    internal fun readyForNext(limit: Long = 64L * 1024 * 1024): Boolean {
+        if (!keepAlive || hungUp || !answered) return false
+        val left = (body as? LimitedInputStream)?.remaining ?: 0L
+        if (left == 0L) return true
+        if (left > limit) return false
+        return try {
+            body.skipNBytesCompat(left)
+            true
+        } catch (e: IOException) {
+            false
+        }
     }
 
     /** Content-Length, or null when it is missing, invalid, or the body is chunked. */
@@ -88,7 +117,7 @@ class Exchange internal constructor(
             .append("Content-Length: ").append(length).append("\r\n")
             .append("Cache-Control: no-store\r\n")
             .append("X-Content-Type-Options: nosniff\r\n")
-            .append("Connection: close\r\n")
+            .append(if (keepAlive) "Connection: keep-alive\r\n" else "Connection: close\r\n")
         for ((k, v) in extra) head.append(k).append(": ").append(v).append("\r\n")
         head.append("\r\n")
         out.write(head.toString().toByteArray(Charsets.ISO_8859_1))
@@ -306,13 +335,25 @@ class HttpsServer(
         input.reset()
         s.soTimeout = idleTimeoutMs
         val output = BufferedOutputStream(s.getOutputStream(), 64 * 1024)
-        val exchange = readRequest(input, output, ip) ?: return
-        exchange.onCut = { closeQuietly(s) }
-        handler(exchange)
-        if (!exchange.answered) exchange.fail(500, "failed", "No answer")
-        output.flush()
-        if (!exchange.bodyRead) exchange.drain()
+        serveRequests(s, input, output, ip)
         s.close()
+    }
+
+    /**
+     * Answers requests on one connection. It takes the next request only after a v2 answer that left the connection
+     * clean ([Exchange.readyForNext]); every other connection answers once and ends, as before.
+     */
+    private fun serveRequests(s: Socket, input: InputStream, output: OutputStream, ip: String) {
+        while (!stopped) {
+            val exchange = readRequest(input, output, ip) ?: return
+            exchange.onCut = { closeQuietly(s) }
+            handler(exchange)
+            if (!exchange.answered) exchange.fail(500, "failed", "No answer")
+            output.flush()
+            if (exchange.readyForNext()) continue
+            if (!exchange.bodyRead) exchange.drain()
+            return
+        }
     }
 
     private fun serve(s: Socket, ip: String) {
@@ -347,12 +388,7 @@ class HttpsServer(
         s.soTimeout = idleTimeoutMs
         val input = BufferedInputStream(secure.inputStream, 64 * 1024)
         val output = BufferedOutputStream(secure.outputStream, 64 * 1024)
-        val exchange = readRequest(input, output, ip) ?: return
-        exchange.onCut = { closeQuietly(s) }
-        handler(exchange)
-        if (!exchange.answered) exchange.fail(500, "failed", "No answer")
-        output.flush()
-        if (!exchange.bodyRead) exchange.drain()
+        serveRequests(s, input, output, ip)
         secure.close()
     }
 
@@ -391,7 +427,9 @@ class HttpsServer(
         val query = parseQuery(target.substringAfter('?', ""))
         val length = headers["content-length"]?.trim()?.toLongOrNull()?.takeIf { it >= 0 && !headers.containsKey("transfer-encoding") }
         val body = if (length != null) LimitedInputStream(input, length) else emptyStream()
-        return Exchange(parts[0], path, query, headers, ip, body, output)
+        // only the v2 API reuses a connection, and only for HTTP/1.1 clients that don't ask to close it
+        val keepAlive = path.startsWith(V2.API) && parts[2] == "HTTP/1.1" && headers["connection"]?.lowercase() != "close"
+        return Exchange(parts[0], path, query, headers, ip, body, output, keepAlive)
     }
 
     /** Plain HTTP on the API port: send the client to the same address with https://. */
@@ -515,6 +553,9 @@ class HttpsServer(
 /** Reads at most [limit] bytes from [input], then reports the end of the stream. */
 internal class LimitedInputStream(private val input: InputStream, limit: Long) : InputStream() {
     private var left = limit
+
+    /** How many bytes of the body have not been read yet. */
+    val remaining: Long get() = left
 
     override fun read(): Int {
         if (left <= 0) return -1
